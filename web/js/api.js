@@ -80,8 +80,26 @@ async function post(action, params) {
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('network ' + res.status);
+  if (!res.ok) throw new Error('http ' + res.status);
   return res.json();
+}
+
+/**
+ * 네트워크·CORS 실패를 **예외가 아니라 응답 객체로** 정규화한다.
+ *
+ * ★ 이게 없으면 화면이 말없이 멈춘다.
+ * 호출부는 전부 `res.ok`를 보도록 되어 있는데, fetch가 throw하면 그 분기를 타지 못하고
+ * 처리되지 않은 rejection으로 사라진다. 특히 GAS 웹앱을 "사용자로 실행"으로 잘못
+ * 배포하면 구글이 200 대신 로그인 리다이렉트를 돌려주고 브라우저가 CORS 오류로 만든다
+ * → **로그인 버튼을 눌러도 아무 일도 일어나지 않는다.** 비개발자는 진단할 수단이 없다.
+ * (2026-07-30 2차 검토 [중대] 지적)
+ */
+async function postSafe(action, params) {
+  try {
+    return await post(action, params);
+  } catch (e) {
+    return { ok: false, code: 'network_error' };
+  }
 }
 
 /**
@@ -101,7 +119,7 @@ export async function call(action, params, opts) {
   let result;
   const backoff = [1000, 3000];
   for (let attempt = 0; ; attempt++) {
-    result = await post(action, params);
+    result = await postSafe(action, params);
     // busy는 저녁 피크에 잠금 대기가 길어질 때 나온다 (계약 §4.2).
     if (result && result.code === 'busy' && attempt < backoff.length) {
       await sleep(backoff[attempt]);
@@ -128,6 +146,7 @@ export async function call(action, params, opts) {
 export function errorMessage(code) {
   const MAP = {
     busy: '지금 접속이 몰리고 있어요. 잠시 후 다시 시도해 주세요.',
+    network_error: '서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요. 계속 그러면 담임교사에게 알려주세요.',
     conflict: '방금 기록이 저장되지 않았어요. 잠시 후 다시 시도해 주세요.',
     forbidden: '권한이 없습니다.',
     unauthorized: '등록되지 않은 계정입니다.',

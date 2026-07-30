@@ -81,7 +81,10 @@ async function renderDoc(root, id) {
     '</div>' +
     sourceHtml(doc);
 
-  el('#lib-back').onclick = function () { openDocId = null; query = ''; render(root); };
+  el('#lib-back').onclick = function () {
+    clearTimeout(searchTimer);   // 대기 중인 검색이 뒤늦게 화면을 덮어쓰지 않도록
+    openDocId = null; query = ''; render(root);
+  };
   const q = el('#lib-q');
   q.oninput = function () {
     // 대요리문답은 196문답(162KB)이라 키 입력마다 재렌더하면 저사양 폰에서 버벅인다.
@@ -149,7 +152,20 @@ function sourceHtml(doc) {
   );
 }
 
+/**
+ * 대기 중인 지연 검색을 취소한다.
+ *
+ * ★ 검색어를 치고 180ms 안에 다른 탭으로 넘어가면, 뒤늦게 실행된 applySearch가
+ * `#view`를 문서 본문으로 덮어써 **방금 연 탭 위에 자료 본문이 겹쳐 보인다.**
+ * 탭을 전환할 때마다 app.js가 이 함수를 부른다 (2026-07-30 2차 검토 지적).
+ */
+export function cancelPending() {
+  clearTimeout(searchTimer);
+  searchTimer = null;
+}
+
 export function resetView() {
+  cancelPending();
   openDocId = null;
   query = '';
 }

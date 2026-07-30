@@ -158,8 +158,20 @@ function createUtilities(uuidCounter) {
  * **다른 구글 앱에서 발급받은 토큰으로 로그인이 뚫린다** — 완전한 계정 탈취다.
  * (2026-07-30 최종 검토 [중대] 지적)
  */
-function createUrlFetchApp() {
-  const nowSec = () => Math.floor(Date.now() / 1000);
+// 샌드박스 안의 Date를 오프셋만큼 앞당긴다. Auth.gs의 Date.now()와 new Date()가 함께 움직인다.
+function makeShiftedDate(clock) {
+  return class ShiftedDate extends Date {
+    constructor(...args) {
+      if (args.length === 0) super(Date.now() + clock.offsetMs);
+      else super(...args);
+    }
+    static now() { return Date.now() + clock.offsetMs; }
+  };
+}
+
+function createUrlFetchApp(clock) {
+  // tokeninfo 응답의 exp도 같은 시계를 기준으로 만든다.
+  const nowSec = () => Math.floor((Date.now() + clock.offsetMs) / 1000);
   const PREFIXES = [
     { p: 'mock:', body: (e) => ({ aud: 'mock-client', iss: 'accounts.google.com', exp: nowSec() + 3600, email: e, email_verified: 'true' }) },
     { p: 'badaud:', body: (e) => ({ aud: 'someone-elses-client', iss: 'accounts.google.com', exp: nowSec() + 3600, email: e, email_verified: 'true' }) },
@@ -169,14 +181,21 @@ function createUrlFetchApp() {
     { p: 'noemail:', body: () => ({ aud: 'mock-client', iss: 'accounts.google.com', exp: nowSec() + 3600, email_verified: 'true' }) },
     // https://accounts.google.com 도 구글이 실제로 쓰는 iss 값이다 — 둘 다 통과해야 한다.
     { p: 'issurl:', body: (e) => ({ aud: 'mock-client', iss: 'https://accounts.google.com', exp: nowSec() + 3600, email: e, email_verified: 'true' }) },
+    // 수명 60초짜리 토큰 — 토큰 캐시(TTL 300초)가 토큰보다 오래 사는 상황을 만든다.
+    { p: 'short:', body: (e) => ({ aud: 'mock-client', iss: 'accounts.google.com', exp: nowSec() + 60, email: e, email_verified: 'true' }) },
   ];
+  // ★ 같은 토큰 문자열은 항상 같은 exp를 돌려준다 — 실제 ID 토큰과 같은 성질이다.
+  // 매번 새로 발급하면 시간을 앞으로 돌려도 토큰이 계속 갱신되어 만료를 재현할 수 없다.
+  const issued = new Map();
+
   return {
     fetch(url) {
       let idToken = '';
       try { idToken = new URL(url).searchParams.get('id_token') || ''; } catch (e) { /* ignore */ }
       for (const spec of PREFIXES) {
         if (idToken.startsWith(spec.p)) {
-          const body = spec.body(idToken.slice(spec.p.length));
+          if (!issued.has(idToken)) issued.set(idToken, spec.body(idToken.slice(spec.p.length)));
+          const body = issued.get(idToken);
           return { getResponseCode: () => 200, getContentText: () => JSON.stringify(body) };
         }
       }
@@ -187,6 +206,10 @@ function createUrlFetchApp() {
 
 export function createHarness(seed = {}) {
   const counter = { cellsRead: 0 };
+  // 토큰 캐시의 exp 재확인 분기를 실제로 밟기 위한 가상 시계.
+  // 토큰의 exp는 발급 시점에 고정되므로 "토큰이 만료됐다"를 재현하려면 **시간을 흘려야** 한다.
+  // 토큰 문자열은 그대로 두어야 다이제스트 키가 같고, 그래야 캐시 히트 경로를 탄다.
+  const clock = { offsetMs: 0 };
   const uuidCounter = { n: 0 };
   const sheetsByName = {};
 
@@ -270,8 +293,9 @@ export function createHarness(seed = {}) {
       MimeType: { JSON: 'JSON' },
       createTextOutput: (t) => ({ _t: t, setMimeType() { return this; }, getContent() { return this._t; } }),
     },
+    Date: makeShiftedDate(clock),
     Utilities: createUtilities(uuidCounter),
-    UrlFetchApp: createUrlFetchApp(),
+    UrlFetchApp: createUrlFetchApp(clock),
   };
 
   const context = vm.createContext(sandbox);
@@ -291,6 +315,8 @@ export function createHarness(seed = {}) {
     lockState,
     cacheStore,
     resetCells() { counter.cellsRead = 0; },
+    // 가상 시계를 앞으로 돌린다(초 단위). 토큰 만료·캐시 수명 검증용.
+    advanceClock(seconds) { clock.offsetMs += seconds * 1000; },
     todayStr() { return context.todayStr_(); },
     addDays(d, n) { return context.addDaysToDateStr_(d, n); },
   };

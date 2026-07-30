@@ -36,6 +36,16 @@ function targetDate() {
   return editDate || todayStr();
 }
 
+/**
+ * 보관해 둔 draft가 «어제» 것이면 편집 대상을 어제로 맞춘다.
+ * 이렇게 하지 않으면 재로그인 후 조건이 어긋나 복원되지 않고, draft가 메모리에 남아
+ * 나중에 사용자가 «어제 기록하기»를 누르는 순간 서버 기록 위에 엉뚱하게 덮어써진다
+ * (2026-07-30 2차 검토 지적).
+ */
+export function restoreDraftContext() {
+  if (draft && draft.date !== todayStr()) editDate = draft.date;
+}
+
 function recordFor(date) {
   return state.records.find(function (r) { return r.date === date; }) || null;
 }

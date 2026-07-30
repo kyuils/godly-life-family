@@ -186,6 +186,8 @@ function renderTab() {
   const root = el('#view');
   root.innerHTML = '';
   closeSheet();
+  // 자료 탭의 지연 검색이 다른 탭 화면을 덮어쓰지 않도록 취소한다.
+  viewLibrary.cancelPending();
   switch (state.tab) {
     case 'today': viewToday.render(root); break;
     case 'calendar': viewCalendar.render(root); break;
@@ -206,6 +208,7 @@ function renderTab() {
 function backToLogin(message) {
   resetUserData();
   viewToday.resetEditDate();
+  viewToday.restoreDraftContext();  // 어제 draft가 있으면 편집 대상을 어제로 되돌린다
   viewCalendar.resetView();
   viewPrayer.resetView();
   viewLibrary.resetView();
@@ -216,13 +219,15 @@ function backToLogin(message) {
 
 window.addEventListener('app:session-expired', function () {
   // 화면을 갈아엎기 전에 작성 중이던 내용을 메모리에 보관한다.
-  // 재로그인하면 «오늘» 탭이 그대로 되살린다.
+  // 재로그인하면 해당 탭이 그대로 되살린다.
   viewToday.stashDraft();
+  viewPrayer.stashDraft();
   backToLogin('로그인이 만료되었습니다. 다시 로그인해 주세요. (쓰던 내용은 보관해 두었어요)');
 });
 window.addEventListener('app:signed-out', function () {
   // 본인이 명시적으로 로그아웃한 경우다. 다음 사람에게 남기지 않는다 (계약 §6.1).
   viewToday.clearDraft();
+  viewPrayer.clearDraft();
   backToLogin('');
 });
 

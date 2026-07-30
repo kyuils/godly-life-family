@@ -15,6 +15,19 @@ import { el, escapeHtml, nl2br, toast, shortDate, ymLabel } from './ui.js';
 // 사용자가 펼쳐 둔 "응답됨" 카드 id. 렌더 사이에 유지한다.
 const expanded = new Set();
 
+// 작성 중이던 기도제목(최대 1000자). 세션 만료로 화면이 갈아엎히면 여기 보관했다가
+// 재로그인 후 되살린다 — «오늘» 탭과 동일한 이유다(계약 §6.3 취지).
+let draft = null;
+
+export function stashDraft() {
+  const ta = el('#p-new');
+  if (ta && ta.value.trim()) draft = ta.value;
+}
+
+export function clearDraft() {
+  draft = null;
+}
+
 export function render(root) {
   const groups = S.groupPrayersByMonth(state.prayers);
   const openCount = state.prayers.filter(function (p) { return p.status === 'open'; }).length;
@@ -31,6 +44,12 @@ export function render(root) {
       ? '<div class="prayer-counter">기도 중인 제목 <b>' + openCount + '</b>개</div>' +
         groups.map(groupHtml).join('')
       : '<div class="empty-note">아직 요청한 기도가 없어요.</div>');
+
+  if (draft) {
+    el('#p-new').value = draft;
+    draft = null;
+    toast('작성 중이던 기도 제목을 되살렸어요.');
+  }
 
   el('#p-add').onclick = add;
   bindCards(root);

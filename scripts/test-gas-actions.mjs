@@ -480,10 +480,16 @@ section('★ 보안 회귀 테스트 (CLAUDE.md 완료 기준 — 불변식 1~6)
   }
   t("[1-b] iss가 'https://accounts.google.com' 이어도 통과한다 (구글이 실제로 쓰는 값)", () =>
     eq(h.callAction({ action: 'whoami', idToken: 'issurl:' + STUDENT }).ok, true));
-  t('[1-b] 만료 토큰은 캐시로 되살아나지 않는다', () => {
-    // 정상 토큰을 한 번 통과시켜 토큰 캐시를 채운 뒤, 만료 토큰이 그 캐시를 타지 않는지 본다.
-    h.callAction({ action: 'whoami', idToken: tok(STUDENT) });
-    return eq(h.callAction({ action: 'whoami', idToken: 'expired:' + STUDENT }).code, 'token_expired');
+  t('[1-b] ★ 토큰 캐시가 만료된 토큰을 되살리지 않는다', () => {
+    // 이 검사가 의미를 가지려면 **같은 토큰 문자열**로 캐시를 채운 뒤 그 토큰이
+    // 만료되어야 한다. 다른 프리픽스 토큰을 쓰면 다이제스트 키가 달라져
+    // Auth.gs의 캐시 히트 분기를 아예 밟지 못한다(= 공허한 테스트).
+    // 수명 60초 토큰으로 캐시를 채운다(토큰 캐시 TTL은 300초라 캐시가 토큰보다 오래 산다).
+    const h2 = createHarness(seedBase());
+    const shortTok = 'short:' + STUDENT;
+    if (!h2.callAction({ action: 'whoami', idToken: shortTok }).ok) return '캐시 준비 실패';
+    h2.advanceClock(120);   // 2분 경과 — 토큰은 만료, 캐시 엔트리는 아직 살아 있다
+    return eq(h2.callAction({ action: 'whoami', idToken: shortTok }).code, 'token_expired');
   });
 }
 
@@ -570,6 +576,20 @@ section('★ 보안 회귀 테스트 (CLAUDE.md 완료 기준 — 불변식 1~6)
     h.callAction({ action: 'addPrayer', idToken: tok(STUDENT), text: '@import(evil)' });
     const row = h.sheet(NAMES.PRAYERS).objects()[0];
     return String(row['기도제목']).startsWith("'@") ? true : JSON.stringify(row['기도제목']);
+  });
+  t('[5] ★ 명부에 손으로 넣은 수식 이름이 RECORDS/PRAYERS로 전파되지 않는다', () => {
+    // 명부는 사람이 직접 편집한다. 거기 =HYPERLINK(...)를 넣으면 기록 시트로 번진다.
+    const h3 = createHarness(seedBase({
+      students: [{ email: STUDENT, 이름: '=HYPERLINK("evil","x")', active: 'TRUE', 가입시각: '2026-01-15' }],
+    }));
+    const today = h3.todayStr();
+    h3.callAction({ action: 'setRecord', idToken: tok(STUDENT), date: today, wordRead: true });
+    h3.callAction({ action: 'addPrayer', idToken: tok(STUDENT), text: '기도' });
+    const rec = h3.sheet('RECORDS_' + today.slice(0, 7)).objects()[0];
+    const pray = h3.sheet(NAMES.PRAYERS).objects()[0];
+    if (!String(rec['이름']).startsWith("'=")) return 'RECORDS 이름 미정제: ' + rec['이름'];
+    if (!String(pray['이름']).startsWith("'=")) return 'PRAYERS 이름 미정제: ' + pray['이름'];
+    return true;
   });
   t('[5] 등록 시 이름도 방어한다', () => {
     const h2 = createHarness(seedBase());

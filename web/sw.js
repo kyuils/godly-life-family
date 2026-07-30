@@ -83,20 +83,48 @@ self.addEventListener('fetch', function (e) {
     return;
   }
 
-  // network-first — 온라인이면 항상 최신 코드, 오프라인이면 캐시로 버틴다.
-  e.respondWith(
-    fetch(req)
-      .then(function (res) {
-        if (res && res.ok && res.type === 'basic') {
-          const copy = res.clone();
-          caches.open(CACHE).then(function (c) { c.put(req, copy); });
-        }
-        return res;
-      })
-      .catch(function () {
-        return caches.match(req).then(function (hit) {
-          return hit || caches.match('index.html');
-        });
-      })
-  );
+  // network-first(3초 타임아웃) — 온라인이면 최신 코드, 느리거나 끊기면 캐시로 버틴다.
+  //
+  // 타임아웃이 필요한 이유: 오프라인이면 fetch가 곧바로 실패하지만, **불안정한 모바일
+  // 회선에서는 실패하지 않고 계속 매달린다.** 그러면 앱 시작이 무한정 늦어진다.
+  // 3초 안에 응답이 없으면 캐시본으로 먼저 띄우고, 네트워크 응답은 도착하는 대로
+  // 캐시에 넣어 다음 실행에 반영한다.
+  e.respondWith(networkFirst(req));
 });
+
+function networkFirst(req) {
+  const network = fetch(req).then(function (res) {
+    if (res && res.ok && res.type === 'basic') {
+      const copy = res.clone();
+      caches.open(CACHE).then(function (c) { c.put(req, copy); });
+    }
+    return res;
+  });
+
+  const timeout = new Promise(function (resolve) {
+    setTimeout(function () { resolve(null); }, 3000);
+  });
+
+  return Promise.race([network.catch(function () { return null; }), timeout])
+    .then(function (res) {
+      if (res) return res;
+      return caches.match(req).then(function (hit) {
+        if (hit) return hit;
+        // 캐시에도 없다면 네트워크 응답을 끝까지 기다려 본다.
+        return network.catch(function () { return offlineFallback(req); });
+      });
+    });
+}
+
+/**
+ * 오프라인 폴백.
+ *
+ * ★ 페이지 이동(navigate) 요청에만 index.html을 돌려준다.
+ * JS 모듈 요청에 HTML을 돌려주면 strict MIME 검사에 걸려
+ * "Failed to load module script"로 죽고 **빈 화면만 남는다**
+ * (2026-07-30 2차 검토 [중대] 지적).
+ */
+function offlineFallback(req) {
+  if (req.mode === 'navigate') return caches.match('index.html');
+  return new Response('', { status: 504, statusText: 'offline' });
+}

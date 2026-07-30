@@ -127,6 +127,25 @@ check('skipWaiting + clients.claim으로 즉시 교체된다', () =>
 check('캐시명에 BUILD_TAG가 들어간다', () =>
   /CACHE\s*=\s*'[^']*'\s*\+\s*BUILD_TAG/.test(sw) || '캐시명이 버전과 무관함');
 
+// 계약 §6.2 — 자산 성격별 전략. 이 검사가 없으면 다음 사람이 계약을 읽고
+// cache-first로 되돌려도 아무도 못 잡는다(그러면 '고쳤는데 안 바뀜'이 재발한다).
+check('참고자료·아이콘은 cache-first로 분기한다', () =>
+  (/isImmutableAsset/.test(sw) && /\/data\//.test(sw) && /\/icons\//.test(sw)) ||
+  '자산별 분기(isImmutableAsset)가 없음');
+check('앱 코드는 network-first다 (cache-first 고착 방지)', () =>
+  /networkFirst\s*\(/.test(sw) || 'networkFirst 경로가 없음');
+check('network-first에 타임아웃 레이스가 있다', () =>
+  (/Promise\.race/.test(sw) && /setTimeout/.test(sw)) ||
+  '타임아웃이 없어 불안정한 회선에서 앱 시작이 매달릴 수 있음');
+check('오프라인 폴백은 navigate 요청에만 index.html을 준다', () =>
+  /req\.mode\s*===\s*'navigate'/.test(sw) ||
+  'JS 요청에 HTML을 돌려주면 MIME 오류로 빈 화면이 된다');
+check('localhost에서는 서비스워커를 등록하지 않는다', () => {
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  return (/localhost/.test(app) && /unregister\(\)/.test(app)) ||
+    'app.js에 localhost 예외가 없음 — 개발 중 옛 코드가 실행된다';
+});
+
 // --- 4) XSS 방어 ------------------------------------------------------------
 console.log('\n--- 출력 이스케이프 ---');
 check('사용자 입력을 innerHTML에 넣는 화면 파일이 escapeHtml을 쓴다', () => {

@@ -44,15 +44,19 @@ function gisReady() {
  * 복구 수단이 없고, 빠른 회선에서는 재현되지 않아 점검을 통과해 버린다.
  * (2026-07-30 최종 검토에서 [치명]으로 지적된 결함)
  */
+let gisPollTimer = null;
+
 function whenGisReady(onReady, onTimeout) {
+  // 재진입(세션 만료 → 로그인 화면 재렌더) 시 인터벌이 누적되지 않도록 항상 정리한다.
+  if (gisPollTimer) { clearInterval(gisPollTimer); gisPollTimer = null; }
   if (gisReady()) { onReady(); return; }
   let waited = 0;
   const step = 250;
   const limit = 15000; // 15초까지 기다린다 (느린 모바일 회선 대비)
-  const timer = setInterval(function () {
-    if (gisReady()) { clearInterval(timer); onReady(); return; }
+  gisPollTimer = setInterval(function () {
+    if (gisReady()) { clearInterval(gisPollTimer); gisPollTimer = null; onReady(); return; }
     waited += step;
-    if (waited >= limit) { clearInterval(timer); onTimeout(); }
+    if (waited >= limit) { clearInterval(gisPollTimer); gisPollTimer = null; onTimeout(); }
   }, step);
 }
 
