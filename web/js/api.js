@@ -143,7 +143,12 @@ export async function call(action, params, opts) {
   const EXPIRED = ['token_expired', 'invalid_token', 'no_token'];
   if (result && result.ok === false && EXPIRED.indexOf(result.code) >= 0) {
     clearSession();
-    window.dispatchEvent(new CustomEvent('app:session-expired'));
+    // 어떤 액션이 어떤 코드로 끊겼는지 실어 보낸다. 이 이벤트는 화면을 로그인으로
+    // 되돌리는 유일한 자동 경로라, 정보가 없으면 «로그인했는데 로그인 화면으로
+    // 돌아온다»가 원인 불명으로 남는다 (2026-07-30 설치 후 실제 신고).
+    window.dispatchEvent(new CustomEvent('app:session-expired', {
+      detail: { action: action, code: result.code },
+    }));
     return result;
   }
 
