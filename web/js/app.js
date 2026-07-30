@@ -251,9 +251,12 @@ function renderApp() {
     s.kind === 'teacher' ? '담임교사' : (s.kind === 'parent' ? '학부모' : '학생');
 
   el('#nav').innerHTML = visibleTabs().map(function (t) {
-    // 기존 디자인 시스템의 .topnav button / .active 규칙을 그대로 쓴다.
+    // 아이콘 위 / 글자 아래. 휴대폰에서 누를 면적을 넉넉히 잡기 위한 배치다.
+    // (TABS는 이 파일 안의 상수라 사용자 입력이 섞이지 않는다)
     return '<button class="' + (state.tab === t.id ? 'active' : '') + '" data-tab="' + t.id + '">' +
-      t.icon + ' ' + t.label + '</button>';
+      '<span class="tab-icon">' + t.icon + '</span>' +
+      '<span class="tab-label">' + t.label + '</span>' +
+      '</button>';
   }).join('');
   el('#nav').querySelectorAll('[data-tab]').forEach(function (b) {
     b.onclick = function () { state.tab = b.dataset.tab; renderApp(); };

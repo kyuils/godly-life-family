@@ -323,13 +323,22 @@
       overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
     }
     .topnav::-webkit-scrollbar{display:none}
+    /* 탭 하나하나가 «다른 페이지»로 가는 문이다. 휴대폰에서 엄지로 정확히 누를 수
+       있어야 하므로 아이콘을 위, 글자를 아래로 두어 누를 면적을 넉넉히 잡는다
+       (높이 약 64px — 손가락 터치 권장치 44px 이상). */
     .topnav button{
-      flex:1 1 0;min-width:0;padding:var(--space-12) var(--space-4);
-      font-size:var(--type-caption1-size);letter-spacing:var(--type-caption2-tracking);
+      flex:1 1 0;min-width:0;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+      padding:var(--space-10) var(--space-4) var(--space-8);
       color:var(--semantic-label-alternative);white-space:nowrap;
       overflow:hidden;text-overflow:ellipsis;
       border-bottom:2px solid transparent;
       transition:color 150ms ease, border-color 150ms ease;
+    }
+    .topnav .tab-icon{font-size:1.5rem;line-height:1.1}
+    .topnav .tab-label{
+      font-size:var(--type-label1-size);font-weight:var(--weight-medium);
+      line-height:1.2;overflow:hidden;text-overflow:ellipsis;max-width:100%;
     }
     .topnav button.active{color:var(--semantic-primary-normal);font-weight:var(--weight-bold-text);border-bottom-color:var(--semantic-primary-normal)}
 
