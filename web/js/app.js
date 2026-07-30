@@ -143,6 +143,7 @@ async function loadMyData() {
 
   state.months = months;
   state.records = rows;
+  state.statsRecords = rows;   // 지표 기준 창 고정 (달력 이동에 영향받지 않음)
   // 6개월을 다 쓰고도 더 필요하면 화면에 '+'를 붙인다.
   state.streakCapped = S.streakNeedsMoreMonths(rows, today, months);
 
@@ -214,9 +215,14 @@ function backToLogin(message) {
 }
 
 window.addEventListener('app:session-expired', function () {
-  backToLogin('로그인이 만료되었습니다. 다시 로그인해 주세요.');
+  // 화면을 갈아엎기 전에 작성 중이던 내용을 메모리에 보관한다.
+  // 재로그인하면 «오늘» 탭이 그대로 되살린다.
+  viewToday.stashDraft();
+  backToLogin('로그인이 만료되었습니다. 다시 로그인해 주세요. (쓰던 내용은 보관해 두었어요)');
 });
 window.addEventListener('app:signed-out', function () {
+  // 본인이 명시적으로 로그아웃한 경우다. 다음 사람에게 남기지 않는다 (계약 §6.1).
+  viewToday.clearDraft();
   backToLogin('');
 });
 
@@ -235,10 +241,25 @@ function start() {
 }
 
 // 서비스워커 — 정적 자산과 참고자료만 캐시한다. GAS 호출(POST)은 절대 캐시하지 않는다 (계약 §6.2).
-if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+//
+// 로컬 미리보기(localhost)에서는 등록하지 않는다. 등록해 두면 고친 코드가 아니라
+// 캐시된 옛 코드가 계속 실행되어, 화면을 확인해도 사실은 옛 버전을 보게 된다
+// (2026-07-30 개발 중 실제로 이 사고가 났다). 개발 중에 "테스트했는데 왜 안 되지"의
+// 원인을 몇 시간 잡아먹는 종류의 문제라 아예 차단한다.
+const IS_LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+if ('serviceWorker' in navigator && location.protocol !== 'file:' && !IS_LOCAL) {
   window.addEventListener('load', function () {
     navigator.serviceWorker.register('sw.js').catch(function () { /* 무시 */ });
   });
+} else if ('serviceWorker' in navigator && IS_LOCAL) {
+  // 이전에 등록해 둔 것이 남아 있으면 지운다.
+  navigator.serviceWorker.getRegistrations().then(function (rs) {
+    rs.forEach(function (r) { r.unregister(); });
+  }).catch(function () { /* 무시 */ });
+  if (window.caches) {
+    caches.keys().then(function (ks) { ks.forEach(function (k) { caches.delete(k); }); })
+      .catch(function () { /* 무시 */ });
+  }
 }
 
 start();

@@ -30,6 +30,32 @@ function applyToken(email, idToken) {
   api.setSession(email, idToken);
 }
 
+function gisReady() {
+  return !!(window.google && window.google.accounts && window.google.accounts.id);
+}
+
+/**
+ * 구글 로그인(GIS) 스크립트가 준비될 때까지 기다린다.
+ *
+ * ★ 이 대기가 없으면 로그인 버튼이 아예 뜨지 않는 경로가 열린다.
+ * index.html에서 app.js는 type="module"(암묵적 defer)이라 문서 파싱 직후 실행되는데,
+ * GIS 스크립트는 async 교차출처라 네트워크가 느리면 그보다 늦게 도착한다.
+ * 그러면 initGis가 window.google을 못 찾고 그대로 포기해 버린다 — 새로고침 말고는
+ * 복구 수단이 없고, 빠른 회선에서는 재현되지 않아 점검을 통과해 버린다.
+ * (2026-07-30 최종 검토에서 [치명]으로 지적된 결함)
+ */
+function whenGisReady(onReady, onTimeout) {
+  if (gisReady()) { onReady(); return; }
+  let waited = 0;
+  const step = 250;
+  const limit = 15000; // 15초까지 기다린다 (느린 모바일 회선 대비)
+  const timer = setInterval(function () {
+    if (gisReady()) { clearInterval(timer); onReady(); return; }
+    waited += step;
+    if (waited >= limit) { clearInterval(timer); onTimeout(); }
+  }, step);
+}
+
 export function initGis(container, callback) {
   onSignedIn = callback;
 
@@ -40,11 +66,25 @@ export function initGis(container, callback) {
     return;
   }
 
-  if (!window.google || !window.google.accounts || !window.google.accounts.id) {
-    container.textContent = '구글 로그인을 불러오지 못했습니다. 네트워크를 확인해 주세요.';
-    return;
-  }
+  container.textContent = '로그인 준비 중...';
+  whenGisReady(
+    function () { container.textContent = ''; renderGisButton(container); },
+    function () {
+      container.innerHTML = '';
+      const btn = document.createElement('button');
+      btn.className = 'btn primary block';
+      btn.textContent = '다시 시도';
+      btn.onclick = function () { location.reload(); };
+      container.appendChild(btn);
+      const p = document.createElement('p');
+      p.className = 'login-notice';
+      p.textContent = '구글 로그인을 불러오지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.';
+      container.appendChild(p);
+    }
+  );
+}
 
+function renderGisButton(container) {
   window.google.accounts.id.initialize({
     client_id: APP_CONFIG.OAUTH_CLIENT_ID,
     callback: function (resp) {

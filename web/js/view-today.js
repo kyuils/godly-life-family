@@ -9,6 +9,29 @@ import { el, toast, escapeHtml } from './ui.js';
 
 let editDate = null; // null이면 오늘
 
+// 작성 중이던 입력 임시 보관.
+// 구글 ID 토큰은 약 1시간이면 만료된다. 앱을 열어둔 채 긴 '결단'을 쓰고 저장하면
+// token_expired → 로그인 화면 전환이 일어나는데, 그때 입력이 통째로 사라지면
+// 청소년 사용자가 유일하게 긴 글을 쓰는 화면에서 데이터를 잃는다.
+// (2026-07-30 최종 검토 [중대] 지적) — 메모리에만 두므로 계약 §6.1을 위반하지 않는다.
+let draft = null; // { date, wordRead, verse, resolution, intercession }
+
+export function stashDraft() {
+  const w = el('#t-word');
+  if (!w) return; // 오늘 탭이 화면에 없으면 보관할 것도 없다
+  draft = {
+    date: targetDate(),
+    wordRead: w.classList.contains('checked'),
+    verse: el('#t-verse').value,
+    resolution: el('#t-res').value,
+    intercession: el('#t-inter').classList.contains('checked'),
+  };
+}
+
+export function clearDraft() {
+  draft = null;
+}
+
 function targetDate() {
   return editDate || todayStr();
 }
@@ -71,6 +94,16 @@ export function render(root) {
   el('#t-verse').value = rec ? rec.verse : '';
   el('#t-res').value = rec ? rec.resolution : '';
 
+  // 세션이 끊겨 재로그인한 경우, 쓰던 내용을 되살린다.
+  if (draft && draft.date === date) {
+    el('#t-verse').value = draft.verse;
+    el('#t-res').value = draft.resolution;
+    el('#t-word').classList.toggle('checked', draft.wordRead);
+    el('#t-inter').classList.toggle('checked', draft.intercession);
+    draft = null;
+    toast('작성 중이던 내용을 되살렸어요. 저장 버튼을 눌러 주세요.');
+  }
+
   el('#t-toggle').onclick = function () {
     editDate = isToday ? addDays(todayStr(), -1) : null;
     render(root);
@@ -102,7 +135,7 @@ async function save(root) {
       return;
     }
     const fresh = await api.call('getMyRecords', { months: state.months }, { noCache: true });
-    if (fresh.ok) state.records = fresh.rows;
+    if (fresh.ok) { state.records = fresh.rows; state.statsRecords = fresh.rows; }
     toast('저장했습니다.');
     render(root);
   } catch (e) {
