@@ -2,7 +2,7 @@
 // 맥체인 본문 4개 + 말씀읽음 / 와닿은말씀 / 결단 / 중보기도
 
 import * as api from './api.js';
-import { state } from './state.js';
+import { state, bumpGeneration, stale } from './state.js';
 import { todayStr } from './auth.js';
 import { addDays } from './stats.js';
 import { el, toast, escapeHtml } from './ui.js';
@@ -57,6 +57,9 @@ function targetDate() {
  */
 export function restoreDraftContext() {
   if (!draft) return;
+  // 주인이 다르면 편집 대상(어제/오늘)도 넘겨주지 않는다 — 내용은 아니지만
+  // 앞사람의 화면 상태가 뒷사람 화면을 결정하는 것도 막는다 (4차 검토 지적).
+  if (draft.email !== (state.session && state.session.email)) return;
   const today = todayStr();
   if (draft.date === today) return;                 // 그대로 오늘 화면에서 복원된다
   if (draft.date === addDays(today, -1)) {          // 어제 편집 중이었다
@@ -155,6 +158,7 @@ export function render(root) {
 
 async function save(root) {
   const btn = el('#t-save');
+  const gen = bumpGeneration();        // 저장 중에 탭이 바뀌면 렌더를 포기한다
   btn.disabled = true;                 // 더블 서브밋 방지 (계약 §4.2)
   btn.textContent = '저장 중...';
   try {
@@ -165,20 +169,24 @@ async function save(root) {
       resolution: el('#t-res').value,
       intercession: el('#t-inter').classList.contains('checked'),
     });
+    if (stale(gen)) return;
     if (!res.ok) {
       toast(api.errorMessage(res.code));
       return;
     }
     const fresh = await api.call('getMyRecords', { months: state.months }, { noCache: true });
     if (fresh.ok) { state.records = fresh.rows; state.statsRecords = fresh.rows; }
+    if (stale(gen)) return;            // 저장은 됐지만 화면은 다른 탭이다 — 덮어쓰지 않는다
     toast('저장했습니다.');
     render(root);
   } catch (e) {
     // 오프라인·네트워크 실패: 큐잉하지 않고 즉시 알린다. 입력 내용은 화면에 남는다 (계약 §6.3).
-    toast('저장하지 못했습니다. 인터넷 연결을 확인해 주세요.');
+    if (!stale(gen)) toast('저장하지 못했습니다. 인터넷 연결을 확인해 주세요.');
   } finally {
-    btn.disabled = false;
-    btn.textContent = '저장하기';
+    if (!stale(gen)) {
+      btn.disabled = false;
+      btn.textContent = '저장하기';
+    }
   }
 }
 

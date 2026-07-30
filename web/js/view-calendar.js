@@ -65,6 +65,14 @@ function rateCard(title, r) {
 export function render(root) {
   const ym = currentYm();
   const today = todayStr();
+
+  // 2차 방어: 어떤 이유로든 보고 있는 달이 로드되지 않은 상태라면, 빈 달력을 그려
+  // "기록이 없다"고 오인하게 두지 말고 다시 불러온다.
+  if (state.months.length && state.months.indexOf(ym) < 0) {
+    root.innerHTML = '<div class="loading">불러오는 중...</div>';
+    ensureMonthLoaded(ym, root);
+    return;
+  }
   const cells = S.monthGrid(state.records, ym, today);
   const canPrev = ym > lowerBoundYm();
   const canNext = ym < S.ymOf(today);
@@ -86,15 +94,15 @@ export function render(root) {
       '<span><i class="day-mark future"></i> 아직 안 온 날</span>' +
     '</div>';
 
+  // ★ 여기서 viewYm을 미리 바꾸지 않는다. ensureMonthLoaded가 로드에 성공했을 때만
+  //   옮긴다 — 미리 바꿔 두면 로드가 중단됐을 때 되돌릴 원본이 사라진다.
   el('#cal-prev').onclick = function () {
     if (!canPrev) return;
-    viewYm = S.ymOf(S.addDays(ym + '-01', -1));
-    ensureMonthLoaded(viewYm, root);
+    ensureMonthLoaded(S.ymOf(S.addDays(ym + '-01', -1)), root);
   };
   el('#cal-next').onclick = function () {
     if (!canNext) return;
-    viewYm = S.ymOf(S.addDays(ym + '-01', 32));
-    ensureMonthLoaded(viewYm, root);
+    ensureMonthLoaded(S.ymOf(S.addDays(ym + '-01', 32)), root);
   };
   root.querySelectorAll('.day-cell[data-date]').forEach(function (b) {
     b.onclick = function () { openDay(b.dataset.date); };
@@ -114,20 +122,40 @@ function cellHtml(c) {
 /**
  * 화면에 띄울 달이 아직 로드되지 않았으면 서버에서 가져온다.
  * months는 최대 6개이므로, 넘치면 가장 오래된 달을 버린다(현재 보는 달은 항상 유지).
+ *
+ * ★ 중단(stale)할 때 반드시 `viewYm`을 원래 달로 되돌린다.
+ * 되돌리지 않으면 `viewYm`은 새 달을 가리키는데 `state.records`는 갱신되지 않은 채로
+ * 남아, 달력 탭으로 돌아왔을 때 그 달 전체가 «기록 없음»으로 그려진다.
+ * 사용자에게는 **"내 기록이 통째로 사라졌다"** 로 보이고 되살릴 UI 경로도 없다
+ * (2026-07-30 4차 검토 [중대] — 세대 카운터를 넣으면서 만든 결함).
  */
 async function ensureMonthLoaded(ym, root) {
   const gen = bumpGeneration();
-  if (state.months.indexOf(ym) >= 0) { render(root); return; }
+
+  // 이미 로드된 달이면 곧바로 옮긴다.
+  if (state.months.indexOf(ym) >= 0) { viewYm = ym; render(root); return; }
+
   let months = state.months.concat([ym]);
   if (months.length > 6) {
     months = months.sort().slice(-6);
     if (months.indexOf(ym) < 0) months = months.slice(1).concat([ym]);
   }
+
+  root.innerHTML = '<div class="loading">불러오는 중...</div>';
   const res = await api.call('getMyRecords', { months: months });
-  if (stale(gen)) return;              // 불러오는 사이 다른 탭으로 이동했다
-  if (!res.ok) { toast(api.errorMessage(res.code)); return; }
+
+  // 중단되면 **화면을 옮기지 않는다.** viewYm은 여전히 로드된 달을 가리키므로
+  // 돌아왔을 때 빈 달력이 그려지는 일이 없다.
+  if (stale(gen)) return;
+
+  if (!res.ok) {
+    toast(api.errorMessage(res.code));
+    render(root);          // 원래 달을 다시 그린다
+    return;
+  }
   state.months = months;
   state.records = res.rows;
+  viewYm = ym;             // 성공했을 때만 옮긴다
   render(root);
 }
 

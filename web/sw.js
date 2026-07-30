@@ -95,10 +95,14 @@ self.addEventListener('fetch', function (e) {
 });
 
 function networkFirst(e, req) {
+  // 캐시 쓰기가 끝나는 시점을 따로 잡아 둔다. `network`만 waitUntil에 걸면
+  // 응답 도착 시점에 이미 이행되어 **캐시 쓰기 완료를 기다리지 않는다**
+  // (2026-07-30 4차 검토 지적).
+  let cacheWrite = Promise.resolve();
   const network = fetch(req).then(function (res) {
     if (res && res.ok && res.type === 'basic') {
       const copy = res.clone();
-      caches.open(CACHE).then(function (c) { c.put(req, copy); });
+      cacheWrite = caches.open(CACHE).then(function (c) { return c.put(req, copy); });
     }
     return res;
   });
@@ -109,7 +113,11 @@ function networkFirst(e, req) {
 
   // 타임아웃이 이겨서 respondWith가 먼저 끝나도, 늦게 도착한 응답을 캐시에 넣는 작업이
   // SW 종료로 유실되지 않도록 이벤트 수명을 연장한다.
-  try { e.waitUntil(network.catch(function () {})); } catch (err) { /* 무시 */ }
+  try {
+    e.waitUntil(
+      network.catch(function () {}).then(function () { return cacheWrite.catch(function () {}); })
+    );
+  } catch (err) { /* 무시 */ }
 
   return Promise.race([network.catch(function () { return null; }), timeout])
     .then(function (res) {

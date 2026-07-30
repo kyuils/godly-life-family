@@ -8,7 +8,7 @@
 //   - 응답 체크는 본인만 (사용자 결정 2026-07-30)
 
 import * as api from './api.js';
-import { state } from './state.js';
+import { state, bumpGeneration, stale } from './state.js';
 import * as S from './stats.js';
 import { el, escapeHtml, nl2br, toast, shortDate, ymLabel } from './ui.js';
 
@@ -116,9 +116,10 @@ function bindCards(root) {
   });
 }
 
-async function reload(root) {
+async function reload(root, gen) {
   const res = await api.call('getMyPrayers', {}, { noCache: true });
   if (res.ok) state.prayers = res.rows;
+  if (gen !== undefined && stale(gen)) return;  // 그 사이 다른 탭으로 이동했다
   render(root);
 }
 
@@ -127,48 +128,54 @@ async function add() {
   const text = ta.value.trim();
   if (!text) { toast('기도 제목을 입력해 주세요.'); return; }
   const btn = el('#p-add');
+  const gen = bumpGeneration();
   btn.disabled = true;
   try {
     const res = await api.call('addPrayer', { text: text });
+    if (stale(gen)) return;
     if (!res.ok) { toast(api.errorMessage(res.code)); return; }
     ta.value = '';
     toast('기도 요청을 등록했어요.');
-    await reload(el('#view'));
+    await reload(el('#view'), gen);
   } catch (e) {
-    toast('등록하지 못했습니다. 인터넷 연결을 확인해 주세요.');
+    if (!stale(gen)) toast('등록하지 못했습니다. 인터넷 연결을 확인해 주세요.');
   } finally {
-    btn.disabled = false;
+    if (!stale(gen)) btn.disabled = false;
   }
 }
 
 async function setAnswered(id, answered, root, btn) {
+  const gen = bumpGeneration();
   btn.disabled = true;
   try {
     const res = await api.call('setPrayerAnswered', { id: id, answered: answered });
+    if (stale(gen)) return;
     if (!res.ok) { toast(api.errorMessage(res.code)); return; }
     if (answered) expanded.delete(id); // 응답 처리하면 접힌 상태로 보인다
     toast(answered ? '응답받은 기도로 옮겼어요.' : '다시 기도 중으로 되돌렸어요.');
-    await reload(root);
+    await reload(root, gen);
   } catch (e) {
-    toast('처리하지 못했습니다. 인터넷 연결을 확인해 주세요.');
+    if (!stale(gen)) toast('처리하지 못했습니다. 인터넷 연결을 확인해 주세요.');
   } finally {
-    btn.disabled = false;
+    if (!stale(gen)) btn.disabled = false;
   }
 }
 
 async function remove(id, root, btn) {
   if (!window.confirm('이 기도 제목을 삭제할까요?')) return;
+  const gen = bumpGeneration();
   btn.disabled = true;
   try {
     const res = await api.call('deletePrayer', { id: id });
+    if (stale(gen)) return;
     if (!res.ok) { toast(api.errorMessage(res.code)); return; }
     expanded.delete(id);
     toast('삭제했어요.');
-    await reload(root);
+    await reload(root, gen);
   } catch (e) {
-    toast('삭제하지 못했습니다. 인터넷 연결을 확인해 주세요.');
+    if (!stale(gen)) toast('삭제하지 못했습니다. 인터넷 연결을 확인해 주세요.');
   } finally {
-    btn.disabled = false;
+    if (!stale(gen)) btn.disabled = false;
   }
 }
 

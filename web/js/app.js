@@ -161,6 +161,10 @@ function visibleTabs() {
 
 function renderApp() {
   show('screen-app');
+  // 보관해 둔 draft가 '어제' 것이면 편집 대상을 어제로 맞춘다.
+  // **로그인이 끝난 뒤**에 부른다 — 로그인 전에 부르면 앞사람의 편집 상태가
+  // 뒷사람 화면을 결정한다 (4차 검토 지적).
+  viewToday.restoreDraftContext();
   const s = state.session;
   el('#app-name').textContent = s.name || '';
   el('#app-kind').textContent =
@@ -210,7 +214,6 @@ function renderTab() {
 function backToLogin(message) {
   resetUserData();
   viewToday.resetEditDate();
-  viewToday.restoreDraftContext();  // 어제 draft가 있으면 편집 대상을 어제로 되돌린다
   viewCalendar.resetView();
   viewPrayer.resetView();
   viewLibrary.resetView();

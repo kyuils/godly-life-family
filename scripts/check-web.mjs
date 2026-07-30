@@ -157,6 +157,42 @@ check('사용자 입력을 innerHTML에 넣는 화면 파일이 escapeHtml을 �
   return missing.length === 0 || 'escapeHtml 미사용: ' + missing.join(', ');
 });
 
+check('await 뒤 화면을 다시 그리는 뷰는 stale 가드를 쓴다', () => {
+  // 비동기 응답이 늦게 도착해 **이미 다른 탭으로 바뀐 화면**을 덮어쓰는 사고를 막는다.
+  // 3차·4차 검토에서 각각 다른 파일에 같은 결함이 남아 있었다 — 다음 사람이
+  // 새 뷰를 추가할 때 같은 실수를 반복하지 않도록 정적으로 강제한다.
+  const offenders = [];
+  fs.readdirSync(JS).filter((f) => f.indexOf('view-') === 0).forEach((f) => {
+    const s = codeOnly(read(path.join(JS, f)));
+    const hasAwait = /await\s/.test(s);
+    const redraws = /innerHTML|render\(/.test(s);
+    if (hasAwait && redraws && !/stale\(/.test(s)) offenders.push(f);
+  });
+  return offenders.length === 0 || 'stale 가드 없음: ' + offenders.join(', ');
+});
+
+check('draft를 보관하는 뷰는 소유자 email로 격리한다', () => {
+  // 보관해 둔 입력이 계정 전환 후 다른 사람에게 복원되면 불변식 7 위반이다.
+  const offenders = [];
+  fs.readdirSync(JS).filter((f) => f.indexOf('view-') === 0).forEach((f) => {
+    const s = codeOnly(read(path.join(JS, f)));
+    if (!/stashDraft/.test(s)) return;
+    if (!/draft\.email/.test(s)) offenders.push(f);
+  });
+  return offenders.length === 0 || 'draft 소유자 검사 없음: ' + offenders.join(', ');
+});
+
+check('인증 실패 코드가 모두 사용자 문구를 갖는다', () => {
+  // 문구가 없으면 "문제가 발생했습니다"로만 끝나 비개발자가 원인을 찾지 못한다.
+  const required = [
+    'aud_mismatch', 'iss_mismatch', 'tokeninfo_failed', 'invalid_token',
+    'email_unverified', 'token_expired', 'unauthorized', 'forbidden',
+    'busy', 'conflict', 'network_error', 'server_misconfig',
+  ];
+  const missing = required.filter((c) => !new RegExp('\\b' + c + '\\s*:').test(api));
+  return missing.length === 0 || '문구 없음: ' + missing.join(', ');
+});
+
 // --- 5) 모듈 그래프 ---------------------------------------------------------
 console.log('\n--- 모듈·자산 참조 ---');
 check('모든 상대 import 경로가 실재한다', () => {

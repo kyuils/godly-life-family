@@ -152,11 +152,6 @@ function openMember(email) {
   openSheet(m.name, m.email, body);
 }
 
-export async function refresh(root) {
-  state.classRecords = null;
-  await render(root);
-}
-
 export function resetView() {
   kindTab = 'student';
   subTab = 'records';
