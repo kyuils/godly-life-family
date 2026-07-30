@@ -249,10 +249,21 @@ function start() {
   // 두 값을 모두 검사한다. 클라이언트 ID만 빠지면 구글 로그인이 조용히 실패해
   // **버튼이 없는 표지 화면**만 남고, 원인이 콘솔에만 찍힌다.
   const missing = [];
-  if (String(APP_CONFIG.GAS_URL).indexOf('PASTE_') === 0) missing.push('서버 주소(GAS_URL)');
+  const gasUrl = String(APP_CONFIG.GAS_URL || '').trim();
+  if (!gasUrl || gasUrl.indexOf('PASTE_') === 0) missing.push('서버 주소(GAS_URL)');
+
   // MOCK 모드(로컬 미리보기)는 구글 로그인을 건너뛰므로 클라이언트 ID가 필요 없다.
-  if (!auth.isMock() && String(APP_CONFIG.OAUTH_CLIENT_ID).indexOf('PASTE_') === 0) {
-    missing.push('구글 로그인 키(OAUTH_CLIENT_ID)');
+  if (!auth.isMock()) {
+    const cid = String(APP_CONFIG.OAUTH_CLIENT_ID || '').trim();
+    // placeholder만 검사하면 빈 값이나 잘못 붙여넣은 값(예: 클라이언트 «보안 비밀번호»)이
+    // 그대로 통과해, 화면에 안내 없이 로그인 버튼만 안 뜨는 상태가 된다.
+    // 구글 클라이언트 ID는 항상 이 접미사로 끝난다.
+    if (!cid || cid.indexOf('PASTE_') === 0) {
+      missing.push('구글 로그인 키(OAUTH_CLIENT_ID)');
+    } else if (cid.indexOf('.apps.googleusercontent.com') < 0) {
+      missing.push('구글 로그인 키(OAUTH_CLIENT_ID) — 형식이 다릅니다. ' +
+        '«.apps.googleusercontent.com»으로 끝나는 «클라이언트 ID»를 넣어야 합니다');
+    }
   }
   if (missing.length) {
     show('screen-login');

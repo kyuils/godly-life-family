@@ -188,6 +188,52 @@ await t('network_error 문구가 인터넷과 배포 설정을 함께 안내한�
   return (m.indexOf('인터넷') >= 0 && m.indexOf('설정') >= 0) || m;
 });
 
+console.log('\n--- busy 재시도 (저녁 몰림 대비) ---');
+
+await t('busy를 받으면 재시도해서 최종 성공을 돌려준다', async () => {
+  // 저녁에 여러 명이 동시에 저장하면 서버 잠금 대기가 길어져 busy가 온다(계약 §4.2).
+  // 사용자에게 오류를 보여주기 전에 앱이 스스로 두 번까지 다시 시도해야 한다.
+  api.clearSession();
+  api.setSession('b@example.com', 't');
+  const realFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    const body = calls < 3 ? { ok: false, code: 'busy' } : { ok: true, saved: true };
+    return { ok: true, json: async () => body };
+  };
+  try {
+    const r = await api.call('setRecord', { date: '2026-07-30', wordRead: true });
+    if (calls < 3) return '재시도하지 않음 (호출 ' + calls + '회)';
+    return (r && r.ok === true) || '최종 결과가 성공이 아님: ' + JSON.stringify(r);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+await t('busy가 계속되면 재시도를 멈추고 busy를 그대로 돌려준다 (무한 재시도 금지)', async () => {
+  api.clearSession();
+  api.setSession('b2@example.com', 't');
+  const realFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return { ok: true, json: async () => ({ ok: false, code: 'busy' }) };
+  };
+  try {
+    const r = await api.call('setRecord', { date: '2026-07-30', wordRead: true });
+    if (calls > 3) return '재시도가 3회를 넘음 (' + calls + '회)';
+    return (r && r.code === 'busy') || JSON.stringify(r);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+await t('busy 안내 문구가 사용자에게 이해되는 말이다', () => {
+  const m = api.errorMessage('busy');
+  return (m.indexOf('busy') < 0 && m.length > 5) || m;
+});
+
 console.log('\n--- 세션 만료 ---');
 
 await t('token_expired면 세션을 버리고 이벤트를 쏜다', async () => {

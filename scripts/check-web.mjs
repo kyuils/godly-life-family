@@ -74,6 +74,14 @@ check('config.js의 GAS_URL이 로컬 주소가 아님', () => {
   return true;
 });
 
+check('OAUTH_CLIENT_ID 형식을 검사하는 가드가 있다', () => {
+  // placeholder만 보면 빈 값·오붙여넣기를 통과시켜, 안내 없이 로그인 버튼만
+  // 안 뜨는 상태가 된다 (4차 검토 지적).
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  return /apps\.googleusercontent\.com/.test(app) ||
+    'app.js에 클라이언트 ID 접미사 검사가 없음';
+});
+
 check('config.js에 시트 ID·등록 코드가 없다 (서버에만 두어야 함)', () => {
   const bad = ['SHEET_ID', 'REGISTER_CODE', 'docs.google.com/spreadsheets'];
   const hit = bad.filter((b) => config.indexOf(b) >= 0);
