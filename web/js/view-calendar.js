@@ -9,6 +9,8 @@ import { el, escapeHtml, nl2br, openSheet, toast, ymLabel } from './ui.js';
 import { formatKo } from './view-today.js';
 
 let viewYm = null;
+// render()의 자동 복구를 1회로 제한하는 플래그 (5차 검토 N3)
+let recoverTried = false;
 
 const DOW = ['월', '화', '수', '목', '금', '토', '일'];
 
@@ -68,11 +70,21 @@ export function render(root) {
 
   // 2차 방어: 어떤 이유로든 보고 있는 달이 로드되지 않은 상태라면, 빈 달력을 그려
   // "기록이 없다"고 오인하게 두지 말고 다시 불러온다.
+  // ★ 단 한 번만 시도한다. 실패 시 다시 render()를 부르므로, 재진입 제한이 없으면
+  //   오프라인에서 render↔ensureMonthLoaded 무한 루프 + 토스트 폭주가 된다
+  //   (2026-07-30 5차 검토 N3).
   if (state.months.length && state.months.indexOf(ym) < 0) {
-    root.innerHTML = '<div class="loading">불러오는 중...</div>';
-    ensureMonthLoaded(ym, root);
-    return;
+    if (!recoverTried) {
+      recoverTried = true;
+      root.innerHTML = '<div class="loading">불러오는 중...</div>';
+      ensureMonthLoaded(ym, root);
+      return;
+    }
+    // 재시도까지 실패했다 — 로드된 달 중 가장 최근으로 되돌려 정상 화면을 보여준다.
+    viewYm = state.months.slice().sort().pop();
+    return render(root);
   }
+  recoverTried = false;
   const cells = S.monthGrid(state.records, ym, today);
   const canPrev = ym > lowerBoundYm();
   const canNext = ym < S.ymOf(today);
@@ -144,18 +156,26 @@ async function ensureMonthLoaded(ym, root) {
   root.innerHTML = '<div class="loading">불러오는 중...</div>';
   const res = await api.call('getMyRecords', { months: months });
 
-  // 중단되면 **화면을 옮기지 않는다.** viewYm은 여전히 로드된 달을 가리키므로
-  // 돌아왔을 때 빈 달력이 그려지는 일이 없다.
-  if (stale(gen)) return;
-
   if (!res.ok) {
-    toast(api.errorMessage(res.code));
-    render(root);          // 원래 달을 다시 그린다
+    if (!stale(gen)) {
+      toast(api.errorMessage(res.code));
+      render(root);        // 원래 달을 다시 그린다
+    }
     return;
   }
+
+  // ★ 받아 온 데이터는 **중단됐어도 버리지 않는다.**
+  // months가 넓어지고 records에 그 달이 추가되는 것뿐이라, 보고 있던 달의 표시는
+  // 그대로 정확하다. 여기서 버리면 애써 받은 데이터를 잃고 다음에 또 받아야 한다.
+  // (규칙: 데이터 갱신은 항상 수행하고, stale은 화면 이동·그리기만 막는다)
   state.months = months;
   state.records = res.rows;
-  viewYm = ym;             // 성공했을 때만 옮긴다
+
+  // 화면 이동은 중단 여부를 본다. 중단됐다면 viewYm은 이전(로드된) 달에 그대로 있고,
+  // records에는 그 달이 여전히 들어 있으므로 돌아왔을 때도 정확하게 그려진다.
+  if (stale(gen)) return;
+
+  viewYm = ym;             // 성공했고 화면이 살아 있을 때만 옮긴다
   render(root);
 }
 
@@ -200,4 +220,5 @@ function field(label, value) {
 
 export function resetView() {
   viewYm = null;
+  recoverTried = false;
 }

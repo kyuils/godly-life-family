@@ -169,14 +169,25 @@ async function save(root) {
       resolution: el('#t-res').value,
       intercession: el('#t-inter').classList.contains('checked'),
     });
-    if (stale(gen)) return;
+    // ★ 여기서 stale로 빠져나가면 안 된다.
+    // 서버에는 저장됐는데 state.records가 옛것으로 남아, 달력이 그날을 «기록 없음»으로
+    // 그린다. 사용자에게는 "저장이 안 됐다"로 보인다 — 이 검토 시리즈가 내내 쫓아온
+    // «데이터 소실 착시»와 같은 결함이다 (2026-07-30 5차 검토 [중대] 지적).
+    //
+    // 규칙: **데이터 갱신은 항상 수행하고, stale은 화면 그리기·토스트만 막는다.**
     if (!res.ok) {
-      toast(api.errorMessage(res.code));
+      if (!stale(gen)) toast(api.errorMessage(res.code));
       return;
     }
     const fresh = await api.call('getMyRecords', { months: state.months }, { noCache: true });
-    if (fresh.ok) { state.records = fresh.rows; state.statsRecords = fresh.rows; }
-    if (stale(gen)) return;            // 저장은 됐지만 화면은 다른 탭이다 — 덮어쓰지 않는다
+    if (fresh.ok) {
+      state.records = fresh.rows;
+      // statsRecords는 «로그인 시 확보한 창»이 기준이다(state.js). 달력에서 과거로
+      // 이동해 months가 좁아진 상태로 덮어쓰면 연속기록이 갑자기 줄어 보인다.
+      // 이번 달이 창에 들어 있을 때만 갱신한다 (5차 검토 N5).
+      if (state.months.indexOf(targetDate().slice(0, 7)) >= 0) state.statsRecords = fresh.rows;
+    }
+    if (stale(gen)) return;            // 데이터는 갱신했다. 화면만 덮어쓰지 않는다.
     toast('저장했습니다.');
     render(root);
   } catch (e) {

@@ -74,12 +74,19 @@ check('config.js의 GAS_URL이 로컬 주소가 아님', () => {
   return true;
 });
 
-check('OAUTH_CLIENT_ID 형식을 검사하는 가드가 있다', () => {
+check('OAUTH_CLIENT_ID 형식을 프론트·서버 양쪽에서 검사한다', () => {
   // placeholder만 보면 빈 값·오붙여넣기를 통과시켜, 안내 없이 로그인 버튼만
-  // 안 뜨는 상태가 된다 (4차 검토 지적).
+  // 안 뜨는 상태가 된다. 서버(Setup.gs)는 붙여넣기 공백까지 trim해야 한다 —
+  // 공백 하나로 aud가 어긋나 로그인 후 모든 동작이 실패한다 (5차 검토 N7).
   const app = codeOnly(read(path.join(JS, 'app.js')));
-  return /apps\.googleusercontent\.com/.test(app) ||
-    'app.js에 클라이언트 ID 접미사 검사가 없음';
+  const setup = codeOnly(read(path.join(ROOT, 'gas', 'Setup.gs')));
+  const missing = [];
+  if (!/apps\.googleusercontent\.com/.test(app)) missing.push('app.js 접미사 검사');
+  if (!/apps\.googleusercontent\.com/.test(setup)) missing.push('Setup.gs 접미사 경고');
+  if (!/SETUP_OAUTH_CLIENT_ID[^;]*\)\s*\.trim\(\)|String\(SETUP_OAUTH_CLIENT_ID[\s\S]{0,40}trim\(\)/.test(setup)) {
+    missing.push('Setup.gs의 클라이언트 ID trim');
+  }
+  return missing.length === 0 || '없음: ' + missing.join(', ');
 });
 
 check('config.js에 시트 ID·등록 코드가 없다 (서버에만 두어야 함)', () => {
@@ -167,8 +174,6 @@ check('사용자 입력을 innerHTML에 넣는 화면 파일이 escapeHtml을 �
 
 check('await 뒤 화면을 다시 그리는 뷰는 stale 가드를 쓴다', () => {
   // 비동기 응답이 늦게 도착해 **이미 다른 탭으로 바뀐 화면**을 덮어쓰는 사고를 막는다.
-  // 3차·4차 검토에서 각각 다른 파일에 같은 결함이 남아 있었다 — 다음 사람이
-  // 새 뷰를 추가할 때 같은 실수를 반복하지 않도록 정적으로 강제한다.
   const offenders = [];
   fs.readdirSync(JS).filter((f) => f.indexOf('view-') === 0).forEach((f) => {
     const s = codeOnly(read(path.join(JS, f)));
@@ -177,6 +182,42 @@ check('await 뒤 화면을 다시 그리는 뷰는 stale 가드를 쓴다', () =
     if (hasAwait && redraws && !/stale\(/.test(s)) offenders.push(f);
   });
   return offenders.length === 0 || 'stale 가드 없음: ' + offenders.join(', ');
+});
+
+check('★ 받아 온 응답을 stale 가드로 버리지 않는다', () => {
+  // ★ 이 검사가 진짜다. "파일 어딘가에 stale이 있는가"는 가드를 **잘못된 자리**에 둔
+  //   결함을 잡지 못한다(5차 검토에서 실제로 5경로 발생).
+  //
+  //   금지 형태:  const res = await api.call(...);
+  //              if (stale(gen)) return;        // ← 방금 받은 res를 버린다
+  //
+  //   여기서 빠져나가면 서버에는 저장/삭제됐는데 로컬 데이터가 옛것으로 남아,
+  //   사용자에게는 «저장이 안 됐다» «지웠는데 그대로다»로 보인다.
+  //   규칙: 데이터 갱신은 항상 수행하고, stale은 화면 그리기·토스트만 막는다.
+  const offenders = [];
+  fs.readdirSync(JS).filter((f) => f.indexOf('view-') === 0).forEach((f) => {
+    const src = codeOnly(read(path.join(JS, f)));
+    let at = 0;
+    for (;;) {
+      const call = src.indexOf('await api.call(', at);
+      if (call < 0) break;
+      // api.call( 의 여는 괄호부터 짝이 맞는 닫는 괄호를 찾는다.
+      let k = src.indexOf('(', call + 'await api.call'.length - 1);
+      let depth = 0;
+      for (; k < src.length; k++) {
+        if (src[k] === '(') depth++;
+        else if (src[k] === ')') { depth--; if (depth === 0) break; }
+      }
+      const after = src.slice(k + 1).replace(/^[;\s]+/, '');
+      if (/^if\s*\(\s*stale\s*\(/.test(after)) {
+        offenders.push(f);
+        break;
+      }
+      at = call + 1;
+    }
+  });
+  return offenders.length === 0 ||
+    '응답 직후 stale로 빠져나감(받은 데이터가 버려짐): ' + offenders.join(', ');
 });
 
 check('draft를 보관하는 뷰는 소유자 email로 격리한다', () => {

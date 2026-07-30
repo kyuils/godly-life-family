@@ -66,9 +66,31 @@ function ymBack(ym, n) {
 const M1 = ymBack(JULY, 1);   // 지난달 (초기 로드에 포함됨)
 const M2 = ymBack(JULY, 2);   // 그 전달 (서버 왕복 필요)
 
+// ★ 이번 달의 **오늘 이전** 날짜만 심는다.
+// 고정으로 1·2·3일을 쓰면 매달 1일·2일에 그 날짜가 «미래»가 되어(stats.js) 테스트가
+// 원인 불명으로 깨진다. 비개발자가 배포 점검에서 만나면 가장 나쁜 종류의 실패다
+// (2026-07-30 5차 검토 지적).
+const TODAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' }).format(new Date());
+
+function addDays(dateStr, n) {
+  const p = dateStr.split('-').map(Number);
+  const dt = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return dt.getUTCFullYear() + '-' +
+    String(dt.getUTCMonth() + 1).padStart(2, '0') + '-' +
+    String(dt.getUTCDate()).padStart(2, '0');
+}
+
+const seedDates = [];
+for (let i = 0; i < 3; i++) {
+  const d = addDays(TODAY, -i);
+  if (d.slice(0, 7) === JULY) seedDates.push(d);   // 이번 달 안쪽만
+}
+const EXPECTED_MARKS = seedDates.length;           // 달 초에는 1~2건일 수 있다
+
 const recordsByMonth = {};
-recordsByMonth[JULY] = [1, 2, 3].map((d) => ({
-  date: JULY + '-0' + d, wordRead: true, verse: '', resolution: '', intercession: false, updatedAt: '',
+recordsByMonth[JULY] = seedDates.map((d) => ({
+  date: d, wordRead: true, verse: '', resolution: '', intercession: false, updatedAt: '',
 }));
 
 let holdRelease = null;   // 붙잡아 둔 응답을 놓아 주는 함수
@@ -132,10 +154,10 @@ function shownYm() {
 
 console.log('=== 달력 월 이동 상태 전이 테스트 ===\n');
 
-await t('초기 화면은 이번 달과 기록 3건을 보여준다', () => {
+await t('초기 화면은 이번 달과 심어 둔 기록 ' + EXPECTED_MARKS + '건을 보여준다', () => {
   setup();
-  return (shownYm() === JULY && doneMarks() === 3) ||
-    '월=' + shownYm() + ' 기록=' + doneMarks();
+  return (shownYm() === JULY && doneMarks() === EXPECTED_MARKS) ||
+    '월=' + shownYm() + ' 기록=' + doneMarks() + ' (기대 ' + EXPECTED_MARKS + ')';
 });
 
 await t('이미 로드된 지난달로는 즉시 이동한다', async () => {
@@ -166,8 +188,8 @@ await t('★ 복귀 후에도 그 달의 기록이 온전히 보인다 (데이�
   // M1은 기록이 없는 달이므로 이번 달로 돌아가 확인한다
   handlers.get('cal-next')();
   await new Promise((r) => setTimeout(r, 10));
-  return (shownYm() === JULY && doneMarks() === 3) ||
-    '월=' + shownYm() + ' 기록=' + doneMarks();
+  return (shownYm() === JULY && doneMarks() === EXPECTED_MARKS) ||
+    '월=' + shownYm() + ' 기록=' + doneMarks() + ' (기대 ' + EXPECTED_MARKS + ')';
 });
 
 await t('중단 뒤에도 정상적인 이전 달 이동이 다시 된다', async () => {

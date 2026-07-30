@@ -132,10 +132,13 @@ async function add() {
   btn.disabled = true;
   try {
     const res = await api.call('addPrayer', { text: text });
-    if (stale(gen)) return;
-    if (!res.ok) { toast(api.errorMessage(res.code)); return; }
+    // 데이터 갱신(reload)은 항상 수행한다. stale은 화면·토스트만 막는다 (5차 검토 N2).
+    if (!res.ok) {
+      if (!stale(gen)) toast(api.errorMessage(res.code));
+      return;
+    }
     ta.value = '';
-    toast('기도 요청을 등록했어요.');
+    if (!stale(gen)) toast('기도 요청을 등록했어요.');
     await reload(el('#view'), gen);
   } catch (e) {
     if (!stale(gen)) toast('등록하지 못했습니다. 인터넷 연결을 확인해 주세요.');
@@ -149,10 +152,12 @@ async function setAnswered(id, answered, root, btn) {
   btn.disabled = true;
   try {
     const res = await api.call('setPrayerAnswered', { id: id, answered: answered });
-    if (stale(gen)) return;
-    if (!res.ok) { toast(api.errorMessage(res.code)); return; }
+    if (!res.ok) {
+      if (!stale(gen)) toast(api.errorMessage(res.code));
+      return;
+    }
     if (answered) expanded.delete(id); // 응답 처리하면 접힌 상태로 보인다
-    toast(answered ? '응답받은 기도로 옮겼어요.' : '다시 기도 중으로 되돌렸어요.');
+    if (!stale(gen)) toast(answered ? '응답받은 기도로 옮겼어요.' : '다시 기도 중으로 되돌렸어요.');
     await reload(root, gen);
   } catch (e) {
     if (!stale(gen)) toast('처리하지 못했습니다. 인터넷 연결을 확인해 주세요.');
@@ -167,10 +172,14 @@ async function remove(id, root, btn) {
   btn.disabled = true;
   try {
     const res = await api.call('deletePrayer', { id: id });
-    if (stale(gen)) return;
-    if (!res.ok) { toast(api.errorMessage(res.code)); return; }
+    // ★ 여기서 빠져나가면 목록에 지운 기도가 남고, 사용자가 다시 «삭제»를 눌렀을 때
+    // 서버가 forbidden을 내어 **«권한이 없습니다»** 가 뜬다 — 자기 기도를 지우는데.
+    if (!res.ok) {
+      if (!stale(gen)) toast(api.errorMessage(res.code));
+      return;
+    }
     expanded.delete(id);
-    toast('삭제했어요.');
+    if (!stale(gen)) toast('삭제했어요.');
     await reload(root, gen);
   } catch (e) {
     if (!stale(gen)) toast('삭제하지 못했습니다. 인터넷 연결을 확인해 주세요.');

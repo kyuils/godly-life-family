@@ -7,7 +7,7 @@
 --- 배포 설정 (커밋 사고 방지) ---
   [PASS] config.js의 MOCK이 null (개발용 로그인 우회가 켜진 채 커밋 금지)
   [PASS] config.js의 GAS_URL이 로컬 주소가 아님
-  [PASS] OAUTH_CLIENT_ID 형식을 검사하는 가드가 있다
+  [PASS] OAUTH_CLIENT_ID 형식을 프론트·서버 양쪽에서 검사한다
   [PASS] config.js에 시트 ID·등록 코드가 없다 (서버에만 두어야 함)
 
 --- 캐시 격리 (가족 공용 기기 대비) ---
@@ -31,6 +31,7 @@
 --- 출력 이스케이프 ---
   [PASS] 사용자 입력을 innerHTML에 넣는 화면 파일이 escapeHtml을 쓴다
   [PASS] await 뒤 화면을 다시 그리는 뷰는 stale 가드를 쓴다
+  [PASS] ★ 받아 온 응답을 stale 가드로 버리지 않는다
   [PASS] draft를 보관하는 뷰는 소유자 email로 격리한다
   [PASS] 인증 실패 코드가 모두 사용자 문구를 갖는다
 
@@ -45,7 +46,7 @@
   [PASS] 소스에 제어문자가 리터럴로 박혀 있지 않다
 
 === 결과 ===
-PASS: 28, FAIL: 0
+PASS: 29, FAIL: 0
 ALL CHECKS PASSED
 
 --- 기본 라우팅 / 인증 ---
@@ -211,7 +212,7 @@ ALL TESTS PASSED
   [PASS] network_error 문구가 인터넷과 배포 설정을 함께 안내한다
 
 --- busy 재시도 (저녁 몰림 대비) ---
-(node:22424) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/00%20workspace/01_Project/%ED%95%99%EB%B6%80%EB%AA%A8%20%EA%B2%BD%EA%B1%B4%EC%83%9D%ED%99%9C%20%EC%95%B1/web/js/api.js is not specified and it doesn't parse as CommonJS.
+(node:15156) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/00%20workspace/01_Project/%ED%95%99%EB%B6%80%EB%AA%A8%20%EA%B2%BD%EA%B1%B4%EC%83%9D%ED%99%9C%20%EC%95%B1/web/js/api.js is not specified and it doesn't parse as CommonJS.
 Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
 To eliminate this warning, add "type": "module" to D:\00 workspace\01_Project\학부모 경건생활 앱\package.json.
 (Use `node --trace-warnings ...` to show where the warning was created)
@@ -251,14 +252,14 @@ ALL TESTS PASSED
 === 결과 ===
 PASS: 11, FAIL: 0
 ALL TESTS PASSED
-(node:20824) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/00%20workspace/01_Project/%ED%95%99%EB%B6%80%EB%AA%A8%20%EA%B2%BD%EA%B1%B4%EC%83%9D%ED%99%9C%20%EC%95%B1/web/js/state.js is not specified and it doesn't parse as CommonJS.
+(node:12468) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/00%20workspace/01_Project/%ED%95%99%EB%B6%80%EB%AA%A8%20%EA%B2%BD%EA%B1%B4%EC%83%9D%ED%99%9C%20%EC%95%B1/web/js/state.js is not specified and it doesn't parse as CommonJS.
 Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
 To eliminate this warning, add "type": "module" to D:\00 workspace\01_Project\학부모 경건생활 앱\package.json.
 (Use `node --trace-warnings ...` to show where the warning was created)
 === 달력 월 이동 상태 전이 테스트 ===
 
-  [PASS] 초기 화면은 이번 달과 기록 3건을 보여준다
-(node:22132) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/00%20workspace/01_Project/%ED%95%99%EB%B6%80%EB%AA%A8%20%EA%B2%BD%EA%B1%B4%EC%83%9D%ED%99%9C%20%EC%95%B1/web/js/state.js is not specified and it doesn't parse as CommonJS.
+  [PASS] 초기 화면은 이번 달과 심어 둔 기록 3건을 보여준다
+(node:33372) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/00%20workspace/01_Project/%ED%95%99%EB%B6%80%EB%AA%A8%20%EA%B2%BD%EA%B1%B4%EC%83%9D%ED%99%9C%20%EC%95%B1/web/js/state.js is not specified and it doesn't parse as CommonJS.
 Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
 To eliminate this warning, add "type": "module" to D:\00 workspace\01_Project\학부모 경건생활 앱\package.json.
 (Use `node --trace-warnings ...` to show where the warning was created)
@@ -271,7 +272,7 @@ To eliminate this warning, add "type": "module" to D:\00 workspace\01_Project\�
 === 결과 ===
 PASS: 6, FAIL: 0
 ALL TESTS PASSED
-(node:27940) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/00%20workspace/01_Project/%ED%95%99%EB%B6%80%EB%AA%A8%20%EA%B2%BD%EA%B1%B4%EC%83%9D%ED%99%9C%20%EC%95%B1/web/js/stats.js is not specified and it doesn't parse as CommonJS.
+(node:26100) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/00%20workspace/01_Project/%ED%95%99%EB%B6%80%EB%AA%A8%20%EA%B2%BD%EA%B1%B4%EC%83%9D%ED%99%9C%20%EC%95%B1/web/js/stats.js is not specified and it doesn't parse as CommonJS.
 Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
 To eliminate this warning, add "type": "module" to D:\00 workspace\01_Project\학부모 경건생활 앱\package.json.
 (Use `node --trace-warnings ...` to show where the warning was created)

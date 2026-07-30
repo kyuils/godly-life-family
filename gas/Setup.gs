@@ -40,9 +40,17 @@ function setupProperties_() {
     Logger.log('!! SHEET_ID가 placeholder입니다 — SETUP_SHEET_ID를 채우고 다시 실행하세요.');
   }
 
-  if (SETUP_OAUTH_CLIENT_ID && SETUP_OAUTH_CLIENT_ID !== 'PASTE_CLIENT_ID_HERE') {
-    props.setProperty('OAUTH_CLIENT_ID', SETUP_OAUTH_CLIENT_ID);
+  // ★ 반드시 trim한다. 붙여넣을 때 딸려 오는 앞뒤 공백 하나 때문에 토큰의 aud와
+  //   달라지고, 사용자에게는 로그인 후 모든 동작이 실패하는 것으로 나타난다.
+  //   문서로 안내하기 전에 코드로 없앨 수 있는 고장이다 (5차 검토 N7).
+  const clientId = String(SETUP_OAUTH_CLIENT_ID || '').trim();
+  if (clientId && clientId !== 'PASTE_CLIENT_ID_HERE') {
+    props.setProperty('OAUTH_CLIENT_ID', clientId);
     Logger.log('Script Properties: OAUTH_CLIENT_ID 설정 완료');
+    if (clientId.indexOf('.apps.googleusercontent.com') < 0) {
+      Logger.log('!! 경고: OAUTH_CLIENT_ID가 «.apps.googleusercontent.com»으로 끝나지 않습니다. ' +
+        '«클라이언트 ID»가 맞는지 확인하세요(«클라이언트 보안 비밀번호»가 아닙니다).');
+    }
   } else {
     Logger.log('!! OAUTH_CLIENT_ID가 placeholder입니다 — 01 문서에서 발급 후 다시 실행하세요.');
   }

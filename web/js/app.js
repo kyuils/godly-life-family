@@ -132,14 +132,20 @@ async function loadMyData() {
   let res = await api.call('getMyRecords', { months: months }, { noCache: true });
   if (!res.ok) { toast(api.errorMessage(res.code)); return; }
   let rows = res.rows;
+  // ★ 실제로 응답을 받은 달만 '보유'로 기록한다.
+  //   확장 요청이 실패했는데 늘어난 months를 그대로 대입하면, 달력에서 그 달로 갔을 때
+  //   재로드 방어가 작동하지 않고 한 달 전체가 «기록 없음»으로 그려진다 (5차 검토 N4).
+  let loadedMonths = months;
 
   let guard = 0;
-  while (S.streakNeedsMoreMonths(rows, today, months) && months.length < 6 && guard++ < 6) {
-    months = S.extendMonths(months, 6);
-    res = await api.call('getMyRecords', { months: months }, { noCache: true });
-    if (!res.ok) break;
+  while (S.streakNeedsMoreMonths(rows, today, loadedMonths) && loadedMonths.length < 6 && guard++ < 6) {
+    const next = S.extendMonths(loadedMonths, 6);
+    res = await api.call('getMyRecords', { months: next }, { noCache: true });
+    if (!res.ok) break;                // 실패하면 loadedMonths는 직전 성공 상태로 남는다
+    loadedMonths = next;
     rows = res.rows;
   }
+  months = loadedMonths;
 
   state.months = months;
   state.records = rows;

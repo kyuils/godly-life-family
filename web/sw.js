@@ -76,7 +76,10 @@ self.addEventListener('fetch', function (e) {
         return fetch(req).then(function (res) {
           if (res && res.ok && res.type === 'basic') {
             const copy = res.clone();
-            caches.open(CACHE).then(function (c) { c.put(req, copy); });
+            // network-first 쪽과 같은 이유로 waitUntil로 수명을 잡고, 실패는 삼킨다.
+            // (catch가 없으면 unhandled rejection이 된다 — 5차 검토 N6)
+            const write = caches.open(CACHE).then(function (c) { return c.put(req, copy); });
+            try { e.waitUntil(write.catch(function () {})); } catch (err) { /* 무시 */ }
           }
           return res;
         });
