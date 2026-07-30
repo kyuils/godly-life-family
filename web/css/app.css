@@ -556,3 +556,117 @@
     :root:not([data-theme="dark"]) .record-card,
     :root:not([data-theme="dark"]) .team-card{box-shadow:0 2px 10px rgba(255,107,74,.06)}
   
+    /* ========================================================================
+       신규 컴포넌트 — 이 앱에서 추가된 화면(달력·기도·자료·세그먼트)
+       기존 토큰(--semantic-*, --dev-*, --space-*, --radius-*)만 사용한다.
+       ======================================================================== */
+
+    /* ---- 버튼 변형 추가 (기존 .btn 규칙 계승) ---- */
+    .btn.danger{background:color-mix(in srgb, var(--semantic-status-negative) 12%, transparent);color:var(--semantic-accent-fg-red)}
+    .btn.danger:hover{background:color-mix(in srgb, var(--semantic-status-negative) 20%, transparent)}
+    .btn:disabled{opacity:.5;pointer-events:none}
+
+    /* ---- 세그먼트 컨트롤 (우리반 탭의 학생/학부모 · 경건생활/기도제목) ---- */
+    .seg{display:flex;gap:6px;margin:12px 16px 0;padding:4px;border-radius:var(--radius-pill);background:var(--semantic-fill-alternative)}
+    .seg.seg-sub{margin-top:8px}
+    .seg-btn{
+      flex:1;min-height:36px;border-radius:var(--radius-pill);
+      font-size:var(--type-label2-size);font-weight:var(--weight-bold-text);
+      color:var(--semantic-label-alternative);background:transparent;
+      transition:background 150ms ease,color 150ms ease;
+    }
+    .seg-btn.on{background:var(--semantic-background-normal-normal);color:var(--semantic-label-normal);box-shadow:var(--shadow-xsmall)}
+
+    /* ---- 월 달력 그리드 (요구사항 2) ---- */
+    .cal-grid{
+      display:grid;grid-template-columns:repeat(7,1fr);gap:6px;
+      margin:8px 16px 4px;
+    }
+    /* .day-cell은 주간 스트립(팀 카드)용으로 이미 정의되어 있다.
+       달력 안에서만 그리드 셀로 동작하도록 범위를 좁혀 덮어쓴다. */
+    .cal-grid .day-cell{
+      flex:none;display:flex;flex-direction:column;align-items:center;gap:2px;
+      padding:4px 0;border-radius:var(--radius-md);background:transparent;
+    }
+    .cal-grid .day-cell:not(.pad):hover{background:var(--semantic-fill-alternative)}
+    .cal-grid .day-cell.pad{visibility:hidden}
+    .cal-grid .day-dow{padding-bottom:2px;font-weight:var(--weight-bold-text)}
+    .day-num{font-size:var(--type-caption1-size);color:var(--semantic-label-alternative);line-height:1}
+    .day-mark.done{background:color-mix(in srgb, var(--dev-read) 20%, transparent);color:var(--dev-read-fg)}
+    .day-mark.done::after{content:'✓';font-size:12px}
+    .day-mark.miss{background:var(--semantic-fill-normal)}
+    .day-mark.future{background:transparent;border:1px dashed var(--semantic-line-solid-normal)}
+    .cal-legend{
+      display:flex;flex-wrap:wrap;gap:14px;margin:4px 16px 8px;
+      font-size:var(--type-caption1-size);color:var(--semantic-label-alternative);
+    }
+    .cal-legend span{display:inline-flex;align-items:center;gap:6px}
+    .cal-legend .day-mark{width:16px;max-width:16px;height:16px}
+    .cal-legend .day-mark.done::after{font-size:10px}
+
+    /* ---- 기도 카드 (요구사항 3) ---- */
+    .prayer-card{
+      margin:8px 16px;padding:14px 16px;border-radius:var(--radius-lg);
+      border:1px solid var(--semantic-line-solid-normal);
+      background:var(--semantic-background-normal-normal);
+    }
+    .prayer-card.open{
+      border-color:color-mix(in srgb, var(--dev-prayer) 30%, transparent);
+      background:color-mix(in srgb, var(--dev-prayer) 5%, var(--semantic-background-normal-normal));
+    }
+    .prayer-card.answered{background:var(--semantic-background-normal-alternative)}
+    .prayer-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+    .prayer-date{font-size:var(--type-caption1-size);color:var(--semantic-label-alternative)}
+    .prayer-status-open{
+      margin-left:auto;font-size:var(--type-caption1-size);font-weight:var(--weight-bold-text);
+      color:var(--dev-prayer-fg);
+    }
+    .prayer-answered-tag{
+      margin-left:auto;font-size:var(--type-caption1-size);font-weight:var(--weight-bold-text);
+      color:var(--semantic-accent-fg-green);
+    }
+    .prayer-text{font-size:var(--type-body2-size);line-height:1.6;color:var(--semantic-label-normal);white-space:normal}
+    .prayer-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+    /* 응답된 기도는 날짜 한 줄로 접는다 — 누르면 펼쳐진다 (요구사항 3) */
+    .prayer-collapsed{
+      display:flex;align-items:center;gap:10px;width:calc(100% - 32px);
+      margin:6px 16px;padding:12px 14px;border-radius:var(--radius-lg);
+      border:1px solid var(--semantic-line-solid-alternative);
+      background:var(--semantic-background-normal-alternative);
+      text-align:left;
+    }
+    .prayer-collapsed:hover{background:var(--semantic-fill-alternative)}
+    .prayer-collapsed .prayer-answered-tag{margin-left:0}
+    .prayer-chevron{margin-left:auto;color:var(--semantic-label-assistive);font-size:18px;line-height:1}
+
+    /* ---- 참고자료 (요구사항 4) ---- */
+    .lib-item{
+      display:flex;align-items:center;gap:10px;width:calc(100% - 32px);
+      margin:6px 16px;padding:14px 16px;border-radius:var(--radius-lg);
+      border:1px solid var(--semantic-line-solid-normal);
+      background:var(--semantic-background-normal-normal);text-align:left;
+    }
+    .lib-item:hover{background:var(--semantic-fill-alternative)}
+    .lib-title{font-weight:var(--weight-bold-text);color:var(--semantic-label-normal)}
+    .lib-meta{font-size:var(--type-caption1-size);color:var(--semantic-label-alternative);margin-left:8px}
+    .lib-body{margin:0 16px}
+    .qa{
+      padding:14px 0;border-bottom:1px solid var(--semantic-line-solid-alternative);
+    }
+    .qa-q{display:flex;gap:8px;font-weight:var(--weight-bold-text);color:var(--semantic-label-normal);line-height:1.55}
+    .qa-no{
+      flex-shrink:0;min-width:26px;height:22px;padding:0 6px;border-radius:6px;
+      display:inline-flex;align-items:center;justify-content:center;
+      background:color-mix(in srgb, var(--dev-verse) 14%, transparent);color:var(--dev-verse-fg);
+      font-size:12px;font-weight:800;
+    }
+    .qa-a{margin-top:8px;font-size:var(--type-body2-size);line-height:1.7;color:var(--semantic-label-neutral)}
+    .qa-refs{margin-top:6px;font-size:var(--type-caption1-size);color:var(--semantic-label-assistive)}
+    .lib-source{
+      margin:16px;padding:14px 16px;border-radius:var(--radius-lg);
+      background:var(--semantic-fill-alternative);
+      font-size:var(--type-caption1-size);line-height:1.7;color:var(--semantic-label-alternative);
+    }
+    .lib-source b{color:var(--semantic-label-neutral)}
+    .lib-source-warn{margin-top:8px;color:var(--semantic-accent-fg-orange);font-weight:var(--weight-bold-text)}
+    .lib-source-note{margin-top:6px}
