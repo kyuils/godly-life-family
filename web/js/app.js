@@ -23,10 +23,30 @@ const TABS = [
   { id: 'class', label: '우리반', icon: '👥', teacherOnly: true },
 ];
 
+/** 내용이 바뀌면 보던 위치가 아니라 맨 위에서 시작한다. */
+function scrollToTop() {
+  try { window.scrollTo(0, 0); } catch (e) { /* 무시 */ }
+}
+
+let shownScreen = null;
+
+/**
+ * 화면 전환 — 로그인 / 가입 / 앱 중 **하나만** 보이게 한다.
+ *
+ * hidden 하나로 갈리므로, css의 `[hidden]{display:none!important}`가 반드시
+ * 함께 있어야 한다. 그 규칙이 없으면 .cover·.register의 display:flex가 이겨
+ * 세 화면이 위아래로 이어 붙는다 (2026-07-30 실사용 신고의 원인).
+ */
 function show(screen) {
   ['screen-login', 'screen-register', 'screen-app'].forEach(function (id) {
     el('#' + id).hidden = (id !== screen);
   });
+  // 화면이 실제로 바뀔 때만 맨 위로. 같은 화면을 다시 그리는 경우(저장 후 갱신 등)는
+  // 보던 위치를 흔들지 않는다.
+  if (screen !== shownScreen) {
+    shownScreen = screen;
+    scrollToTop();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -246,10 +266,22 @@ function renderApp() {
   renderTab();
 }
 
+let shownTab = null;
+
+/**
+ * 탭 내용 그리기.
+ *
+ * 탭은 «다른 페이지»다 — 탭을 옮기면 보던 위치가 아니라 맨 위에서 시작한다.
+ * 반대로 같은 탭을 다시 그리는 경우(저장 후 갱신 등)에는 위치를 흔들지 않는다.
+ */
 function renderTab() {
   const root = el('#view');
   root.innerHTML = '';
   closeSheet();
+  if (state.tab !== shownTab) {
+    shownTab = state.tab;
+    scrollToTop();
+  }
   // 자료 탭의 지연 검색이 다른 탭 화면을 덮어쓰지 않도록 취소한다.
   viewLibrary.cancelPending();
   // 진행 중이던 비동기 렌더가 뒤늦게 이 화면을 덮어쓰지 못하게 세대를 올린다.
