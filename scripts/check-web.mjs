@@ -205,7 +205,9 @@ check('★ 받아 온 응답을 stale 가드로 버리지 않는다', () => {
   //   사용자에게는 «저장이 안 됐다» «지웠는데 그대로다»로 보인다.
   //   규칙: 데이터 갱신은 항상 수행하고, stale은 화면 그리기·토스트만 막는다.
   const offenders = [];
-  const targets = fs.readdirSync(JS).filter((f) => f.indexOf('view-') === 0).concat(['app.js']);
+  // app.js는 stale을 import하지 않으므로 이 규칙이 트리거될 수 없다 —
+  // 넣어 두면 «검사하고 있다»는 착각만 준다(7차 검토 지적). 대상은 뷰 + load.js.
+  const targets = fs.readdirSync(JS).filter((f) => f.indexOf('view-') === 0).concat(['load.js']);
   targets.forEach((f) => {
     const src = codeOnly(read(path.join(JS, f)));
     let at = 0;
@@ -251,6 +253,85 @@ check('인증 실패 코드가 모두 사용자 문구를 갖는다', () => {
   ];
   const missing = required.filter((c) => !new RegExp('\\b' + c + '\\s*:').test(api));
   return missing.length === 0 || '문구 없음: ' + missing.join(', ');
+});
+
+check('★ 로드 실패를 «빈 데이터»로 갈음하지 않는다 (load.js)', () => {
+  // 이 앱에서 가장 흔한 사고: 로그인 순간 회선이 흔들리면 오류 표시 없이
+  // «연속 0일» «기도 없음»이 뜬다. 실패는 반드시 호출부로 전파되어야 한다.
+  const src = codeOnly(read(path.join(JS, 'load.js')));
+  const problems = [];
+
+  // (a) 실패를 기본값으로 갈음하는 삼항 (`p.ok ? p.rows : []`)
+  if (/\.ok\s*\?[^:]*:\s*\[\s*\]/.test(src)) {
+    problems.push('실패를 빈 배열로 갈음하는 삼항이 있음');
+  }
+  // (b) api.call 호출 수만큼 실패 반환이 있어야 한다
+  const calls = (src.match(/await\s+api\.call\(/g) || []).length;
+  const fails = (src.match(/return\s*\{\s*ok:\s*false/g) || []).length;
+  if (calls > 0 && fails < 2) {
+    problems.push('api.call ' + calls + '곳인데 실패 반환이 ' + fails + '곳뿐');
+  }
+  // (c) 성공 경로가 명시적으로 ok:true를 돌려줘야 한다
+  if (!/return\s*\{\s*ok:\s*true/.test(src)) {
+    problems.push('성공 시 { ok: true } 반환이 없음');
+  }
+  return problems.length === 0 || problems.join(', ');
+});
+
+check('★ loadMyData 실패 시 앱 화면을 그리지 않는다 (app.js)', () => {
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  // loadMyData 호출부마다 !loaded.ok 분기가 있어야 한다.
+  const calls = (app.match(/await\s+loadMyData\(/g) || []).length;
+  const guards = (app.match(/!\s*loaded\.ok/g) || []).length;
+  if (calls === 0) return 'loadMyData 호출을 찾지 못함';
+  return calls === guards ||
+    'loadMyData ' + calls + '곳 중 실패 분기는 ' + guards + '곳뿐 — 나머지는 빈 화면을 그린다';
+});
+
+check('★ 호출하는 함수가 실제로 정의되어 있다 (편집 사고 방지)', () => {
+  // 리팩터링 중 블록을 잘라내다 함수가 통째로 사라져도 구문 검사는 통과한다
+  // (실제로 발생: failToLogin이 삭제됐는데 모든 검사가 PASS였다).
+  // 파일 안에서 호출하는 지역 함수가 정의되어 있는지 확인한다.
+  const problems = [];
+  fs.readdirSync(JS).filter((f) => f.endsWith('.js') && f !== 'mccheyne-plan.js').forEach((f) => {
+    const src = codeOnly(read(path.join(JS, f)));
+    const defined = new Set();
+    let m;
+    const defRe = /(?:^|\s)(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_$][\w$]*)/g;
+    while ((m = defRe.exec(src))) defined.add(m[1]);
+    const constRe = /(?:^|\s)(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/g;
+    while ((m = constRe.exec(src))) defined.add(m[1]);
+    // 함수 매개변수도 «정의된 이름»이다. 빠뜨리면 콜백 인자(onReady 등)가 오탐된다.
+    const paramRe = /(?:function\s*[A-Za-z_$][\w$]*\s*\(([^)]*)\)|function\s*\(([^)]*)\)|\(([^)]*)\)\s*=>)/g;
+    while ((m = paramRe.exec(src))) {
+      const list = m[1] || m[2] || m[3] || '';
+      list.split(',').forEach((x) => {
+        const n = x.trim().split(/[=\s]/)[0].replace(/[{}[\].]/g, '');
+        if (n) defined.add(n);
+      });
+    }
+    const importRe = /import\s*(?:\*\s*as\s*([A-Za-z_$][\w$]*)|\{([^}]*)\}|([A-Za-z_$][\w$]*))\s*from/g;
+    while ((m = importRe.exec(src))) {
+      if (m[1]) defined.add(m[1]);
+      if (m[2]) m[2].split(',').forEach((x) => defined.add(x.trim().split(/\s+as\s+/).pop().trim()));
+      if (m[3]) defined.add(m[3]);
+    }
+    // 호출 지점: `이름(` 형태 중 `.`으로 이어지지 않은 것만
+    const callRe = /(?:^|[^.\w$])([a-z_$][\w$]*)\s*\(/g;
+    const BUILTIN = new Set([
+      'if', 'for', 'while', 'switch', 'catch', 'return', 'typeof', 'function', 'await',
+      'require', 'fetch', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
+      'parseInt', 'parseFloat', 'isNaN', 'isFinite', 'String', 'Number', 'Boolean',
+      'atob', 'btoa', 'decodeURIComponent', 'encodeURIComponent', 'alert', 'confirm',
+    ]);
+    while ((m = callRe.exec(src))) {
+      const name = m[1];
+      if (BUILTIN.has(name) || defined.has(name)) continue;
+      problems.push(f + ':' + name);
+    }
+  });
+  const uniq = Array.from(new Set(problems));
+  return uniq.length === 0 || '정의되지 않은 호출: ' + uniq.join(', ');
 });
 
 // --- 5) 모듈 그래프 ---------------------------------------------------------

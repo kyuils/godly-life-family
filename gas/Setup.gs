@@ -123,7 +123,14 @@ function setupTabs_() {
  * 멱등하다 — 이미 보호된 시트는 건너뛴다.
  */
 function protectDataSheets() {
-  const ss = SpreadsheetApp.openById(String(SETUP_SHEET_ID).trim());
+  // 파일 상단 안내대로 이 함수만 따로 실행하는 경우가 있다. 초기화 전이면
+  // openById가 빨간 예외를 던지므로, 여기서도 같은 가드를 둔다 (7차 검토 N6).
+  const sheetId = String(SETUP_SHEET_ID || '').trim();
+  if (!sheetId || sheetId === 'PASTE_SHEET_ID_HERE') {
+    Logger.log('중단: SETUP_SHEET_ID를 먼저 채우고 setupAll을 실행하세요.');
+    return;
+  }
+  const ss = SpreadsheetApp.openById(sheetId);
   const sheets = ss.getSheets();
   let done = 0;
   for (let i = 0; i < sheets.length; i++) {

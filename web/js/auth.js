@@ -22,9 +22,11 @@ export function isMock() {
  * 이 순서가 뒤바뀌면 이전 사용자의 화면 데이터가 잠깐이라도 노출된다.
  */
 function applyToken(email, idToken) {
-  // ★ api 세션은 로그아웃·만료 때 비워지므로, 그것만 보면 «로그아웃 후 다른 사람 로그인»을
-  //   놓친다. 화면이 마지막으로 알고 있던 사용자(state.session)도 함께 본다 (6차 검토 ②).
-  const prev = api.getSessionEmail() || (state.session && state.session.email) || null;
+  // ★ api 세션도 state.session도 로그아웃·만료 시 **같은 턴에** 비워진다.
+  //   그래서 그 둘만 보는 폴백은 실제로는 한 번도 동작하지 않는 死코드였다
+  //   (7차 검토에서 지적받아 정정). 계정 전환을 감지하려면 «지워지지 않는 기록»이
+  //   필요하다 — api.getLastEmail()이 그 목적으로만 존재한다.
+  const prev = api.getSessionEmail() || api.getLastEmail() || null;
   if (prev && prev !== String(email).toLowerCase()) {
     api.clearCache();
     resetUserData();

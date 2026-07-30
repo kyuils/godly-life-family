@@ -300,6 +300,89 @@ await t('★ 세션이 파기된 뒤 도착한 응답은 state를 되살리지 �
   }
 });
 
+console.log('\n--- ★ 로드 실패를 «빈 데이터»로 갈음하지 않는다 ---');
+
+// 이 앱에서 가장 흔한 사고 경로다. 로그인 순간 회선이 한 번 흔들리면
+// 예전에는 오류 없이 «연속 0일» «기도 없음»이 떴다 — 200일 기록한 학생에게
+// «사라졌다»로 보이는 화면이다. 이 3건이 그 회귀를 붙잡아 둔다.
+
+const { loadMyData } = await import('../web/js/load.js');
+
+function setupLoad(email) {
+  state.session = { email: email, name: 'L', role: 'student', kind: 'student' };
+  state.months = [];
+  state.records = [];
+  state.statsRecords = [];
+  state.prayers = [];
+  api.clearSession();
+  api.setSession(email, 't');
+}
+
+await t('정상 응답이면 기록·기도가 state에 채워진다', async () => {
+  const today = todayStr();
+  setupLoad('ok@example.com');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    const b = JSON.parse(opts.body);
+    const body = b.action === 'getMyRecords'
+      ? { ok: true, rows: [{ date: today, wordRead: true, verse: 'v', resolution: '', intercession: false, updatedAt: '' }] }
+      : { ok: true, rows: [{ id: 'P1', createdDate: today, text: '기도', status: 'open', answeredDate: '', updatedAt: '' }] };
+    return { ok: true, json: async () => body };
+  };
+  try {
+    const r = await loadMyData(today);
+    if (!r.ok) return '실패 반환: ' + JSON.stringify(r);
+    return (state.records.length === 1 && state.prayers.length === 1) ||
+      '기록=' + state.records.length + ' 기도=' + state.prayers.length;
+  } finally { globalThis.fetch = realFetch; }
+});
+
+await t('★ 기록 로드 실패는 «0건»이 아니라 {ok:false}를 돌려준다', async () => {
+  const today = todayStr();
+  setupLoad('failrec@example.com');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+  try {
+    const r = await loadMyData(today);
+    if (r.ok) return '★ 실패인데 ok:true — 호출부가 «연속 0일» 화면을 그린다';
+    return r.code === 'network_error' || 'code=' + r.code;
+  } finally { globalThis.fetch = realFetch; }
+});
+
+await t('★ 기도만 실패해도 {ok:false}를 돌려준다 (빈 목록으로 갈음 금지)', async () => {
+  const today = todayStr();
+  setupLoad('failpray@example.com');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    const b = JSON.parse(opts.body);
+    if (b.action === 'getMyPrayers') throw new TypeError('Failed to fetch');
+    return { ok: true, json: async () => ({ ok: true, rows: [] }) };
+  };
+  try {
+    const r = await loadMyData(today);
+    if (r.ok) return '★ 기도 실패인데 ok:true — «아직 요청한 기도가 없어요»로 보인다';
+    return r.code === 'network_error' || 'code=' + r.code;
+  } finally { globalThis.fetch = realFetch; }
+});
+
+await t('★ 로드 중 세션이 파기되면 state를 채우지 않는다', async () => {
+  const today = todayStr();
+  setupLoad('gone2@example.com');
+  const realFetch = globalThis.fetch;
+  let n = 0;
+  globalThis.fetch = async () => {
+    n += 1;
+    if (n === 1) api.clearSession();            // 첫 응답 중 로그아웃/만료
+    return { ok: true, json: async () => ({ ok: true, rows: [{ date: today, wordRead: true, verse: '앞사람', resolution: '', intercession: false, updatedAt: '' }] }) };
+  };
+  try {
+    const r = await loadMyData(today);
+    if (r.ok) return '★ 세션이 없는데 ok:true';
+    if (state.records.length) return '★ 파기된 세션의 데이터가 state에 채워짐';
+    return r.code === 'stale_session' || 'code=' + r.code;
+  } finally { globalThis.fetch = realFetch; }
+});
+
 console.log('\n--- 저장 시각 표기 ---');
 
 t('formatKo가 사람이 읽는 날짜를 만든다', () =>

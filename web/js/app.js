@@ -6,6 +6,7 @@ import * as api from './api.js';
 import * as auth from './auth.js';
 import { state, resetUserData, isTeacher, bumpGeneration } from './state.js';
 import * as S from './stats.js';
+import { loadMyData } from './load.js';
 import { el, escapeHtml, toast, closeSheet } from './ui.js';
 
 import * as viewToday from './view-today.js';
@@ -45,7 +46,7 @@ async function afterSignIn() {
 
   if (res.ok) {
     state.session = res;
-    const loaded = await loadMyData();
+    const loaded = await loadMyData(auth.todayStr());
     if (!loaded.ok) { failToLogin(loaded.code); return; }
     renderApp();
     return;
@@ -108,7 +109,7 @@ async function submitRegister() {
       return;
     }
     state.session = res;           // register 성공 응답은 whoami와 같은 형태
-    const loaded = await loadMyData();
+    const loaded = await loadMyData(auth.todayStr());
     if (!loaded.ok) { failToLogin(loaded.code); return; }
     renderApp();
   } catch (e) {
@@ -119,80 +120,61 @@ async function submitRegister() {
 }
 
 // ---------------------------------------------------------------------------
-// 데이터 로드
+// 로드 실패 처리
 // ---------------------------------------------------------------------------
-
-/**
- * 본인 기록·기도 로드.
- * streak가 로드된 가장 이른 달의 1일까지 닿아 있으면 이전 달을 더 불러온다 (계약 §3.1).
- * 날짜가 아니라 데이터로 판정하므로 긴 연속기록이 잘리지 않는다.
- */
-async function loadMyData() {
-  const today = auth.todayStr();
-  // ★ 응답을 state에 쓰기 전에 «이 요청을 시작한 사람»이 아직 로그인 상태인지 확인한다.
-  //   세션이 파기된 뒤 늦게 도착한 응답이 state를 되살리면, 다음에 로그인한 가족에게
-  //   앞사람 기록이 보일 수 있다 (6차 검토 ② — 불변식 7).
-  const owner = api.getSessionEmail();
-  let months = S.defaultMonths(today);
-
-  let res = await api.call('getMyRecords', { months: months }, { noCache: true });
-  // ★ 실패를 «기록 0건»으로 갈음하지 않는다.
-  //   여기서 그냥 return하면 호출부가 renderApp()을 이어서 부르고, 사용자는 오류 표시
-  //   없이 «연속 0일 / 이번달 0%» 를 본다 — 이 검토 시리즈가 내내 쫓아온
-  //   «데이터 소실 착시»의 원본 서식지다 (6차 검토 ①).
-  if (!res.ok) return { ok: false, code: res.code };
-  let rows = res.rows;
-  // ★ 실제로 응답을 받은 달만 '보유'로 기록한다.
-  //   확장 요청이 실패했는데 늘어난 months를 그대로 대입하면, 달력에서 그 달로 갔을 때
-  //   재로드 방어가 작동하지 않고 한 달 전체가 «기록 없음»으로 그려진다 (5차 검토 N4).
-  let loadedMonths = months;
-
-  let guard = 0;
-  while (S.streakNeedsMoreMonths(rows, today, loadedMonths) && loadedMonths.length < 6 && guard++ < 6) {
-    const next = S.extendMonths(loadedMonths, 6);
-    res = await api.call('getMyRecords', { months: next }, { noCache: true });
-    if (!res.ok) break;                // 실패하면 loadedMonths는 직전 성공 상태로 남는다
-    loadedMonths = next;
-    rows = res.rows;
-  }
-  months = loadedMonths;
-
-  if (api.getSessionEmail() !== owner) return { ok: false, code: 'stale_session' };
-
-  state.months = months;
-  state.records = rows;
-  state.statsRecords = rows;   // 지표 기준 창 고정 (달력 이동에 영향받지 않음)
-  // 6개월을 다 쓰고도 더 필요하면 화면에 '+'를 붙인다.
-  state.streakCapped = S.streakNeedsMoreMonths(rows, today, months);
-
-  const p = await api.call('getMyPrayers', {}, { noCache: true });
-  // 기도 로드 실패도 «기도 없음»으로 갈음하지 않는다.
-  if (!p.ok) return { ok: false, code: p.code };
-  if (api.getSessionEmail() !== owner) return { ok: false, code: 'stale_session' };
-  state.prayers = p.rows;
-  return { ok: true };
-}
 
 /**
  * 로그인은 됐지만 내 기록을 불러오지 못한 경우.
  *
  * 화면을 «빈 앱»으로 보여주면 사용자는 기록이 사라졌다고 오해한다.
- * 무엇이 잘못됐는지 알리고 다시 시도하게 한다 (6차 검토 ①).
+ * 무엇이 잘못됐는지 알리고, 재로그인 없이 다시 시도할 수 있게 한다.
  */
 function failToLogin(code) {
+  // backToLogin과 같은 수준으로 화면 상태까지 비운다 — 앞사람의 편집 대상 날짜,
+  // 펼쳐 둔 기도, 열람 중이던 문서가 다음 로그인으로 이월되지 않게 (7차 검토 N2).
   resetUserData();
-  renderLogin();
-  // 원인 문구를 그대로 이어 붙이면 두세 문장이 겹쳐 읽기 어렵다.
-  // «무엇이 안 됐는지»를 먼저 말하고, 원인은 짧게 덧붙인다.
+  viewToday.resetEditDate();
+  viewToday.clearDraft();
+  viewPrayer.clearDraft();
+  viewCalendar.resetView();
+  viewPrayer.resetView();
+  viewLibrary.resetView();
+  viewClass.resetView();
+
+  // ★ 여기서 renderLogin()을 부르면 안 된다.
+  // MOCK 모드(로컬 미리보기)에서 initGis가 즉시 onSignedIn을 호출하므로
+  // 「로드 실패 → 로그인 화면 → 자동 로그인 → 또 실패」 무한 루프가 된다
+  // (7차 검토 N1). 대신 사용자가 «다시 시도»를 누르게 한다 —
+  // 실제 사용자에게도 재로그인보다 나은 회복 경로다.
+  closeSheet();
+  show('screen-login');
+  const holder = el('#gis-button');
+  holder.innerHTML = '';
+  const btn = document.createElement('button');
+  btn.className = 'btn primary block';
+  btn.textContent = '다시 시도';
+  btn.onclick = function () {
+    el('#login-notice').textContent = '다시 불러오는 중...';
+    btn.disabled = true;
+    // 토큰은 아직 살아 있다 — 전체 재로그인 없이 로드만 다시 시도한다.
+    Promise.resolve(afterSignIn()).catch(function () {
+      btn.disabled = false;
+      el('#login-notice').textContent = '여전히 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+    });
+  };
+  holder.appendChild(btn);
+
   const CAUSE = {
     network_error: '인터넷 연결을 확인해 주세요.',
-    stale_session: '로그인이 끊겼습니다.',
+    stale_session: '로그인이 끊겼습니다. 다시 로그인해 주세요.',
     busy: '지금 접속이 몰리고 있어요.',
+    // 가장 흔한 실패는 1시간 만료다. 이 경우는 재시도가 아니라 재로그인이 필요하다.
+    token_expired: '로그인이 만료되었습니다. 다시 로그인해 주세요.',
+    unauthorized: '등록되지 않은 계정입니다. 담임교사에게 문의해 주세요.',
+    forbidden: '권한이 없습니다.',
   };
   el('#login-notice').textContent =
-    '기록을 불러오지 못했습니다. ' +
-    (CAUSE[code] || '잠시 후 다시 시도해 주세요.') +
-    ' 다시 로그인해 주세요.';
+    '기록을 불러오지 못했습니다. ' + (CAUSE[code] || '잠시 후 다시 시도해 주세요.');
 }
 
 // ---------------------------------------------------------------------------

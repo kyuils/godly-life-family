@@ -18,6 +18,12 @@ const cache = new Map();
 let currentEmail = null;   // 캐시 스코핑 키
 let currentToken = null;
 
+// ★ 계정 전환 감지 **전용**. clearSession()에도 지우지 않는다.
+// 로그아웃·세션만료는 currentEmail을 비우므로, 그것만 보면
+// «로그아웃 → 다른 가족이 로그인»을 감지하지 못한다(그때가 가장 위험한 순간인데).
+// 캐시 키에는 절대 쓰지 않는다 — 어디까지나 «직전에 누구였나»의 기록이다.
+let lastEmail = null;
+
 // 쓰기 액션이 무효화해야 할 읽기 액션 (계약 §6.1)
 const WRITE_INVALIDATES = {
   setRecord: ['getMyRecords', 'getAllRecords'],
@@ -36,11 +42,17 @@ export function setSession(email, idToken) {
   // 계정이 바뀌면 이전 사용자의 캐시를 즉시 파기한다.
   if (currentEmail && currentEmail !== lower) clearCache();
   currentEmail = lower;
+  if (lower) lastEmail = lower;
   currentToken = idToken || null;
 }
 
 export function getSessionEmail() {
   return currentEmail;
+}
+
+/** 직전에 로그인했던 사람(로그아웃 후에도 남는다). 계정 전환 감지 전용. */
+export function getLastEmail() {
+  return lastEmail;
 }
 
 export function clearCache() {
