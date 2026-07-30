@@ -26,10 +26,13 @@ function lowerBoundYm() {
 
 function statsHeader() {
   const today = todayStr();
-  const streak = S.computeStreak(state.records, today);
-  const weekly = S.weeklyRate(state.records, today);
-  const monthly = S.monthlyRate(state.records, today);
-  const inter = S.intercessionCount(state.records, today, 7);
+  // 달력에서 과거 달로 이동해도 상단 지표는 흔들리지 않아야 한다 — 로그인 시 확보한
+  // 창(statsRecords)을 기준으로 계산한다. state.records는 달력 그리드 전용이다.
+  const base = state.statsRecords.length ? state.statsRecords : state.records;
+  const streak = S.computeStreak(base, today);
+  const weekly = S.weeklyRate(base, today);
+  const monthly = S.monthlyRate(base, today);
+  const inter = S.intercessionCount(base, today, 7);
   // 6개월 상한에 걸렸으면 '+'를 붙여 실제로는 더 길 수 있음을 드러낸다 (계약 §3.1).
   const streakLabel = streak + (state.streakCapped ? '+' : '');
 

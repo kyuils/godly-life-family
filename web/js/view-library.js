@@ -84,13 +84,21 @@ async function renderDoc(root, id) {
   el('#lib-back').onclick = function () { openDocId = null; query = ''; render(root); };
   const q = el('#lib-q');
   q.oninput = function () {
-    query = q.value.trim();
-    const pos = q.selectionStart;
-    renderDoc(root, id).then(function () {
-      const nq = el('#lib-q');
-      if (nq) { nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (e) { /* ignore */ } }
-    });
+    // 대요리문답은 196문답(162KB)이라 키 입력마다 재렌더하면 저사양 폰에서 버벅인다.
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function () { applySearch(root, id, q); }, 180);
   };
+}
+
+let searchTimer = null;
+
+function applySearch(root, id, q) {
+  query = q.value.trim();
+  const pos = q.selectionStart;
+  renderDoc(root, id).then(function () {
+    const nq = el('#lib-q');
+    if (nq) { nq.focus(); try { nq.setSelectionRange(pos, pos); } catch (e) { /* ignore */ } }
+  });
 }
 
 function matches(it, q) {

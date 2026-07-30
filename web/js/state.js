@@ -4,8 +4,13 @@
 export const state = {
   session: null,      // { email, name, role, kind, extra, joinedAt }
   tab: 'today',
-  months: [],         // 로드된 달 목록 (YYYY-MM)
-  records: [],        // 본인 기록 (MyRecord[])
+  months: [],         // 달력이 현재 보유한 달 목록 (YYYY-MM)
+  records: [],        // 달력 표시용 기록 (달 이동에 따라 교체됨)
+  // 상단 지표(연속기록·달성률·중보기도)는 로그인 시 로드한 창으로 **고정**한다.
+  // 달력에서 과거로 이동할 때 records를 교체하는데, 지표까지 그걸 쓰면
+  // 6개월 창 밖으로 이번 달이 밀려나는 순간 "연속 0일 / 0%"로 표시된다.
+  // 사용자는 자기 기록이 사라졌다고 인식한다 (2026-07-30 최종 검토 지적).
+  statsRecords: [],
   prayers: [],        // 본인 기도 (Prayer[])
   streakCapped: false,// 6개월 상한에 걸렸는지 (화면에 '+' 표기)
   classRecords: null, // 교사 전용
@@ -22,6 +27,7 @@ export function resetUserData() {
   state.tab = 'today';
   state.months = [];
   state.records = [];
+  state.statsRecords = [];
   state.prayers = [];
   state.streakCapped = false;
   state.classRecords = null;

@@ -192,9 +192,11 @@ function handleRegister(body) {
   }
 
   // 3) 백오프 2단 — email 단위만 두면 계정을 바꿔가며 무제한 시도할 수 있다 (계약 §4.2).
+  // 비교는 >= 다. > 로 두면 카운터가 MAX에 도달한 뒤에도 한 번 더 통과해서
+  // 계약(§4.2 "5회 초과 시 차단")보다 1회 느슨해진다.
   const emailKey = REG_FAIL_PREFIX + email;
-  if (regFailCount_(emailKey) > REG_FAIL_EMAIL_MAX) return { ok: false, code: 'too_many_attempts' };
-  if (regFailCount_(REG_FAIL_GLOBAL_KEY) > REG_FAIL_GLOBAL_MAX) return { ok: false, code: 'too_many_attempts' };
+  if (regFailCount_(emailKey) >= REG_FAIL_EMAIL_MAX) return { ok: false, code: 'too_many_attempts' };
+  if (regFailCount_(REG_FAIL_GLOBAL_KEY) >= REG_FAIL_GLOBAL_MAX) return { ok: false, code: 'too_many_attempts' };
 
   // 4) 등록 폐쇄 검사
   if (!canRegister_()) return { ok: false, code: 'registration_closed' };
@@ -316,7 +318,9 @@ function handleSetRecord(body) {
     const obj = {
       '날짜': date,
       'email': auth.email,
-      '이름': auth.name,
+      // 명부는 사람이 손으로 편집한다 — 거기서 온 이름도 정제해서 전파한다
+      // (불변식 5: 시트에 쓰는 '모든' 자유 텍스트).
+      '이름': sanitizeCell_(auth.name),
       '구분': kindLabel_(auth.kind),
       '말씀읽음': body.wordRead === true ? 'TRUE' : 'FALSE',
       '와닿은말씀': sanitizeCell_(verse),
@@ -394,7 +398,9 @@ function handleAddPrayer(body) {
       '기도ID': id,
       '등록일': today,
       'email': auth.email,
-      '이름': auth.name,
+      // 명부는 사람이 손으로 편집한다 — 거기서 온 이름도 정제해서 전파한다
+      // (불변식 5: 시트에 쓰는 '모든' 자유 텍스트).
+      '이름': sanitizeCell_(auth.name),
       '구분': kindLabel_(auth.kind),
       '기도제목': sanitizeCell_(text),
       '상태': '진행중',
