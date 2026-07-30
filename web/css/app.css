@@ -281,7 +281,13 @@
       pointer-events:none;box-shadow:0 6px 16px -6px rgba(204,120,92,0.5);
     }
     .cta-g{width:26px;height:26px;border-radius:50%;background:#fff;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
-    .cta-gis{position:absolute;inset:0;z-index:2;opacity:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+    /* ★ 구글 로그인 버튼이 들어가는 자리.
+       예전에는 클레이 버튼(.cta-clay) 위에 투명하게 겹쳐 놓는 설계라
+       absolute + opacity:0 이었는데, 그 클레이 버튼이 마크업에서 빠지면서
+       «투명한 채로 화면 전체를 덮는 빈 칸»만 남았다. 실기기에서는 로그인
+       버튼이 보이지도 눌리지도 않는다 (2026-07-30 설치 검증에서 발견).
+       지금은 GIS 버튼 자체를 그대로 보여준다. */
+    .cta-gis{display:flex;align-items:center;justify-content:center;min-height:44px}
     .cta-mock{position:relative;width:100%;height:54px;background:#181715;color:#fff;border-radius:14px;font-size:15px;font-weight:600}
     .cover-foot{margin:0;font-size:13px;color:#A09D96;text-align:center;word-break:keep-all}
 
@@ -522,6 +528,9 @@
       color:var(--semantic-accent-fg-orange);
       font-size:var(--type-label2-size);font-weight:var(--weight-bold-text);
     }
+    /* 내용이 없을 때는 자리도 배경도 차지하지 않는다.
+       (표지 화면에서 빈 주황 막대로 보이던 것을 없앤다) */
+    .login-notice:empty{display:none}
     .inapp-banner{
       margin:0;padding:var(--space-12) var(--space-14);border-radius:var(--radius-lg);
       background:color-mix(in srgb, var(--semantic-status-cautionary) 14%, var(--semantic-background-normal-normal));
