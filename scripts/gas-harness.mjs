@@ -22,6 +22,10 @@ const GAS_DIR = path.join(__dirname, '..', 'gas');
 // 어떤 순서에서도 동작해야 한다 — 테스트가 최악의 순서도 돌려본다.
 const GAS_FILES = ['Sheet.gs', 'Auth.gs', 'Actions.gs', 'Code.gs'];
 
+// Setup.gs는 런타임 경로가 아니지만 **비개발자가 직접 실행하는 유일한 파일**이다.
+// 로드 대상에서 빠지면 구문 오류조차 npm test에서 걸러지지 않는다.
+export const ALL_GAS_FILES = GAS_FILES.concat(['Setup.gs']);
+
 export const HEADERS = {
   MEMBERS_STUDENT: ['email', '이름', '학년반', 'active', '가입시각', '가입경로'],
   MEMBERS_PARENT: ['email', '이름', '자녀이름', 'active', '가입시각', '가입경로'],
@@ -145,21 +149,36 @@ function createUtilities(uuidCounter) {
   };
 }
 
-// `mock:<email>` 토큰은 항상 유효로 취급하고, 그 외는 400(invalid_token).
+/**
+ * tokeninfo 엔드포인트 모의체.
+ *
+ * `mock:<email>` 은 정상 토큰. 그 외 프리픽스로 **각 클레임 검증 경로를 실제로 밟을 수 있게** 한다.
+ * 이게 없으면 Auth.gs의 aud/iss/exp/email_verified 검사 4줄이 테스트 사각지대에 남는다.
+ * 배포가 ANYONE_ANONYMOUS(인터넷 전체 공개)이므로 특히 `aud` 검사가 사라지면
+ * **다른 구글 앱에서 발급받은 토큰으로 로그인이 뚫린다** — 완전한 계정 탈취다.
+ * (2026-07-30 최종 검토 [중대] 지적)
+ */
 function createUrlFetchApp() {
+  const nowSec = () => Math.floor(Date.now() / 1000);
+  const PREFIXES = [
+    { p: 'mock:', body: (e) => ({ aud: 'mock-client', iss: 'accounts.google.com', exp: nowSec() + 3600, email: e, email_verified: 'true' }) },
+    { p: 'badaud:', body: (e) => ({ aud: 'someone-elses-client', iss: 'accounts.google.com', exp: nowSec() + 3600, email: e, email_verified: 'true' }) },
+    { p: 'badiss:', body: (e) => ({ aud: 'mock-client', iss: 'evil.example.com', exp: nowSec() + 3600, email: e, email_verified: 'true' }) },
+    { p: 'expired:', body: (e) => ({ aud: 'mock-client', iss: 'accounts.google.com', exp: nowSec() - 10, email: e, email_verified: 'true' }) },
+    { p: 'unverified:', body: (e) => ({ aud: 'mock-client', iss: 'accounts.google.com', exp: nowSec() + 3600, email: e, email_verified: 'false' }) },
+    { p: 'noemail:', body: () => ({ aud: 'mock-client', iss: 'accounts.google.com', exp: nowSec() + 3600, email_verified: 'true' }) },
+    // https://accounts.google.com 도 구글이 실제로 쓰는 iss 값이다 — 둘 다 통과해야 한다.
+    { p: 'issurl:', body: (e) => ({ aud: 'mock-client', iss: 'https://accounts.google.com', exp: nowSec() + 3600, email: e, email_verified: 'true' }) },
+  ];
   return {
     fetch(url) {
       let idToken = '';
       try { idToken = new URL(url).searchParams.get('id_token') || ''; } catch (e) { /* ignore */ }
-      if (idToken.startsWith('mock:')) {
-        const body = {
-          aud: 'mock-client',
-          iss: 'accounts.google.com',
-          exp: Math.floor(Date.now() / 1000) + 3600,
-          email: idToken.slice(5),
-          email_verified: 'true',
-        };
-        return { getResponseCode: () => 200, getContentText: () => JSON.stringify(body) };
+      for (const spec of PREFIXES) {
+        if (idToken.startsWith(spec.p)) {
+          const body = spec.body(idToken.slice(spec.p.length));
+          return { getResponseCode: () => 200, getContentText: () => JSON.stringify(body) };
+        }
       }
       return { getResponseCode: () => 400, getContentText: () => '{"error":"invalid_token"}' };
     },

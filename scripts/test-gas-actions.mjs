@@ -5,7 +5,8 @@
 //
 // 실패 시 exit 1. 통과 시 exit 0 + "ALL TESTS PASSED".
 
-import { createHarness, NAMES } from './gas-harness.mjs';
+import { createHarness, NAMES, ALL_GAS_FILES } from './gas-harness.mjs';
+import { readFileSync } from 'node:fs';
 
 let pass = 0;
 const failures = [];
@@ -180,13 +181,16 @@ section('register (계약 §4.2)');
     const h = createHarness(seedBase());
     return eq(h.callAction({ action: 'register', idToken: tok(NEW), name: '가'.repeat(31), kind: 'student', code: 'hyerim2026' }).code, 'bad_request');
   });
-  t('bad_code 6회 초과 → too_many_attempts (email 백오프)', () => {
+  t('계약 §4.2대로 bad_code 5회까지만 허용, 6회째 차단 (email 백오프)', () => {
     const h = createHarness(seedBase());
-    let last;
-    for (let i = 0; i < 8; i++) {
-      last = h.callAction({ action: 'register', idToken: tok(NEW), name: 'x', kind: 'student', code: 'wrong' });
+    const codes = [];
+    for (let i = 0; i < 7; i++) {
+      codes.push(h.callAction({ action: 'register', idToken: tok(NEW), name: 'x', kind: 'student', code: 'wrong' }).code);
     }
-    return eq(last.code, 'too_many_attempts');
+    // 1~5회째는 bad_code, 6회째부터 too_many_attempts 여야 한다.
+    const first5 = codes.slice(0, 5).every((c) => c === 'bad_code');
+    const blocked = codes.slice(5).every((c) => c === 'too_many_attempts');
+    return (first5 && blocked) || JSON.stringify(codes);
   });
   t('계정을 바꿔도 전역 백오프가 막는다', () => {
     const h = createHarness(seedBase());
@@ -454,6 +458,35 @@ section('★ 보안 회귀 테스트 (CLAUDE.md 완료 기준 — 불변식 1~6)
   });
 }
 
+// --- 불변식 1-b: 토큰 클레임 검증 (aud / iss / exp / email_verified) ---
+// 이 앱의 GAS 엔드포인트는 ANYONE_ANONYMOUS로 인터넷 전체에 열려 있다.
+// aud 검사가 사라지면 "아무 구글 앱에서 발급받은 ID 토큰"으로 로그인이 뚫린다.
+// 명부에 이름만 있으면 완전한 계정 탈취가 된다 — 인증의 급소다.
+{
+  const h = createHarness(seedBase());
+  const cases = [
+    ['다른 앱에서 발급된 토큰(aud 불일치)', 'badaud:' + STUDENT, 'aud_mismatch'],
+    ['발급자가 구글이 아님(iss 불일치)', 'badiss:' + STUDENT, 'iss_mismatch'],
+    ['만료된 토큰', 'expired:' + STUDENT, 'token_expired'],
+    ['이메일 미인증 계정', 'unverified:' + STUDENT, 'email_unverified'],
+    ['이메일이 없는 토큰', 'noemail:' + STUDENT, 'email_unverified'],
+  ];
+  for (const [label, token, expected] of cases) {
+    t('[1-b] ' + label + ' → ' + expected, () =>
+      eq(h.callAction({ action: 'whoami', idToken: token }).code, expected));
+    t('[1-b] ' + label + ' — 기록 저장도 거부', () =>
+      h.callAction({ action: 'setRecord', idToken: token, date: h.todayStr(), wordRead: true }).ok === false
+        ? true : '저장이 통과함');
+  }
+  t("[1-b] iss가 'https://accounts.google.com' 이어도 통과한다 (구글이 실제로 쓰는 값)", () =>
+    eq(h.callAction({ action: 'whoami', idToken: 'issurl:' + STUDENT }).ok, true));
+  t('[1-b] 만료 토큰은 캐시로 되살아나지 않는다', () => {
+    // 정상 토큰을 한 번 통과시켜 토큰 캐시를 채운 뒤, 만료 토큰이 그 캐시를 타지 않는지 본다.
+    h.callAction({ action: 'whoami', idToken: tok(STUDENT) });
+    return eq(h.callAction({ action: 'whoami', idToken: 'expired:' + STUDENT }).code, 'token_expired');
+  });
+}
+
 // --- 불변식 2: 교사 전용 액션이 student/parent 토큰에 forbidden ---
 {
   const h = createHarness(seedBase());
@@ -572,45 +605,99 @@ section('성능 회귀 — 읽는 셀 수 (계약 §4.5)');
 // ===========================================================================
 {
   // 3,100행(100명 × 31일) 규모의 월 시트에서 setRecord가 전체 열을 읽지 않아야 한다.
-  const ym = '2026-06';
+  // ★ 시드를 "이번 달" 시트로 만든다 — 그래야 실제 setRecord가 이 시트를 대상으로 삼는다.
+  //   고정된 과거 달로 시드하면 setRecord는 빈 새 시트에 쓰게 되고, 테스트는 헬퍼를
+  //   직접 호출하는 우회 검사로 전락한다(2026-07-30 최종 검토 [중대] 지적).
+  const ym = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul' })
+    .format(new Date()).slice(0, 7);
   const bulk = [];
-  for (let d = 1; d <= 31; d++) {
+  const daysInMonth = new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0)).getUTCDate();
+  for (let d = 1; d <= daysInMonth; d++) {
     for (let u = 0; u < 100; u++) {
+      const date = ym + '-' + String(d).padStart(2, '0');
       bulk.push({
-        '날짜': '2026-06-' + String(d).padStart(2, '0'),
+        '날짜': date,
         email: 'u' + u + '@example.com',
         '이름': 'U' + u, '구분': '학생', '말씀읽음': 'TRUE',
         '와닿은말씀': '가'.repeat(50), '결단': '나'.repeat(50), '중보기도': 'TRUE',
-        '기록시각': '2026-06-01T00:00:00.000Z', '수정시각': '2026-06-01T00:00:00.000Z',
+        '기록시각': date + 'T00:00:00.000Z', '수정시각': date + 'T00:00:00.000Z',
       });
     }
   }
   const records = {}; records['RECORDS_' + ym] = bulk;
   const h = createHarness(seedBase({ records }));
   const today = h.todayStr();
+  const expectedRows = daysInMonth * 100;
 
-  t('시드 규모 확인 (3,100행)', () => eq(h.sheet('RECORDS_' + ym).objects().length, 3100, '행 수'));
+  t('시드 규모 확인 (' + expectedRows + '행 = 100명 × ' + daysInMonth + '일)', () =>
+    eq(h.sheet('RECORDS_' + ym).objects().length, expectedRows, '행 수'));
 
-  t('setRecord 스캔이 키 열 2개만 읽는다 (전체 10열 읽기 금지)', () => {
-    // 대상 달을 6월로 강제하기 위해 6월 시트에 직접 upsert가 일어나도록
-    // 오늘이 6월이 아니면 이 검사는 새 시트(빈 시트)에서 이뤄지므로 의미가 없다.
-    // 대신 readColumnsByHeader_를 직접 호출해 셀 수를 측정한다.
+  t('★ 실제 setRecord가 읽는 셀 수 — 키 열 2개만 (전체 10열 읽기 금지)', () => {
     h.resetCells();
-    h.context.readColumnsByHeader_('RECORDS_' + ym, ['날짜', 'email']);
+    const r = h.callAction({
+      action: 'setRecord', idToken: tok(STUDENT), date: today,
+      wordRead: true, verse: '성능 측정', resolution: '', intercession: false,
+    });
+    if (!r.ok) return '저장 실패: ' + JSON.stringify(r);
     const cells = h.counter.cellsRead;
-    // 헤더 1행(10셀) + 키 열 2개 × 3100행 = 6,210셀 근처여야 한다.
-    // 전체 테이블을 읽으면 31,000셀을 넘는다.
-    return cells < 10000 ? true : '읽은 셀 수=' + cells + ' (전체 열을 읽고 있음)';
+    // 헤더 + 키 열 2개 × N행 ≈ 2N. 전체 테이블을 읽으면 10N이 된다.
+    // 신규 행 append 경로이므로 read-verify-write의 행 읽기는 없다.
+    const limit = expectedRows * 4;
+    return cells < limit
+      ? true
+      : '읽은 셀 수=' + cells + ' (상한 ' + limit + ') — 전체 열을 읽고 있습니다';
   });
 
-  t('readTable_ 전체 읽기와의 차이가 실제로 크다 (회귀 감지력 확인)', () => {
+  t('★ 기존 행 갱신(upsert) 경로도 전체 열을 읽지 않는다', () => {
+    // 위에서 만든 행을 다시 저장 → 이번엔 update 경로 + read-verify-write가 탄다.
+    h.resetCells();
+    const r = h.callAction({
+      action: 'setRecord', idToken: tok(STUDENT), date: today,
+      wordRead: true, verse: '성능 측정 2회차', resolution: '', intercession: false,
+    });
+    if (!r.ok) return '저장 실패: ' + JSON.stringify(r);
+    const cells = h.counter.cellsRead;
+    const limit = expectedRows * 4;
+    return cells < limit
+      ? true
+      : '읽은 셀 수=' + cells + ' (상한 ' + limit + ')';
+  });
+
+  t('회귀 감지력 확인 — 전체 읽기로 바꾸면 상한을 넘는다', () => {
+    // readTable_(전체 열)이 실제로 상한을 초과하는지 확인해, 위 두 테스트가
+    // 느슨해서 통과한 것이 아님을 보인다.
     h.resetCells();
     h.context.readTable_('RECORDS_' + ym);
     const full = h.counter.cellsRead;
-    h.resetCells();
-    h.context.readColumnsByHeader_('RECORDS_' + ym, ['날짜', 'email']);
-    const partial = h.counter.cellsRead;
-    return full > partial * 2 ? true : 'full=' + full + ' partial=' + partial;
+    return full >= expectedRows * 4
+      ? true
+      : '전체 읽기=' + full + ' — 상한(' + (expectedRows * 4) + ')이 너무 느슨해 회귀를 못 잡습니다';
+  });
+}
+
+// ===========================================================================
+section('Setup.gs (비개발자가 직접 실행하는 파일)');
+// ===========================================================================
+{
+  // Setup.gs는 런타임 라우터를 타지 않아 다른 테스트가 전혀 건드리지 않는다.
+  // 그런데 이 파일은 **비개발자가 GAS 편집기에서 직접 ▶ 실행하는 유일한 파일**이다.
+  // 구문 오류가 있으면 설치 첫 단계에서 막히고, 원인을 스스로 진단할 수 없다.
+  t('구문 오류 없이 로드되고 다른 파일을 깨뜨리지 않는다', () => {
+    const h = createHarness(seedBase({ fileOrder: ALL_GAS_FILES }));
+    const r = h.callAction({ action: 'whoami', idToken: tok(STUDENT) });
+    return r.ok ? true : JSON.stringify(r);
+  });
+  t('setupAll / protectDataSheets 함수가 실제로 정의되어 있다', () => {
+    const h = createHarness(seedBase({ fileOrder: ALL_GAS_FILES }));
+    const missing = ['setupAll', 'setupProperties_', 'setupTabs_', 'protectDataSheets', 'ensureTab_']
+      .filter((f) => typeof h.context[f] !== 'function');
+    return missing.length === 0 || '정의되지 않음: ' + missing.join(', ');
+  });
+  t('Setup.gs가 Sheet.gs의 상수(SHEET_NAMES/HEADERS)를 그대로 쓴다', () => {
+    // 헤더를 Setup.gs에 따로 복사해 두면 스키마가 갈라진다.
+    const src = readFileSync(new URL('../gas/Setup.gs', import.meta.url), 'utf8');
+    if (/const\s+SETUP_\w*HEADERS/.test(src)) return 'Setup.gs가 헤더를 따로 정의하고 있음';
+    return /HEADERS\.MEMBERS_STUDENT/.test(src) || 'Sheet.gs의 HEADERS를 쓰지 않음';
   });
 }
 

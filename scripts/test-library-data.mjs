@@ -38,6 +38,8 @@ const EXACT_COUNT = {
   wlc: 196,        // 웨스트민스터 대요리문답
   wcf: 33,         // 신도게요서 33장
   heidelberg: 129, // 하이델베르크 요리문답
+  worship: 17,     // 예배모범 (2026-07-30 수집 시점 실측)
+  creed: 3,        // 12신조 = 서언·신조·승인식 3절 (같은 근거)
 };
 
 const HTML_RESIDUE = ['<p>', '<br', '&nbsp;', '&amp;', '&lt;', '&gt;', '&quot;', '</'];
