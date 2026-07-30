@@ -38,8 +38,9 @@
 3. 왼쪽 **편집기**로 돌아오면 `appsscript.json` 파일이 보입니다
 4. 내용을 전부 지우고 저장소의 `gas/appsscript.json` 내용을 붙여넣습니다
 
-   > 이 파일에 **"나(소유자)로 실행 / 모든 사용자 접근"** 설정이 들어 있습니다.
-   > 이 설정이 이 앱의 보안(선생님 외에는 시트에 접근 불가)을 성립시킵니다.
+   > 이 파일에는 배포 화면의 **기본값 힌트**가 들어 있습니다.
+   > 다만 **실제 배포 권한을 결정하는 것은 5번의 배포 대화상자 선택**입니다.
+   > 매니페스트만으로는 보장되지 않으니 5번을 반드시 확인하세요.
 
 ## 3. Setup 파일에 값 채우기
 
@@ -50,11 +51,12 @@ const SETUP_SHEET_ID = '여기에 ① 스프레드시트 ID';
 const SETUP_OAUTH_CLIENT_ID = '여기에 ② OAuth 클라이언트 ID';
 const SETUP_ADMIN_EMAIL = '선생님 구글 이메일';
 const SETUP_ADMIN_NAME = '담임교사';       // 원하는 이름으로
-const SETUP_REGISTER_CODE = 'hyerim2026';  // 학생들에게 알려줄 가입 코드
+const SETUP_REGISTER_CODE = '여기에 직접 정한 가입 코드';  // 학생들에게 알려줄 코드
 ```
 
 **가입 코드**는 학생·학부모가 가입할 때 입력할 암호입니다. 아무거나 정하시면 됩니다.
-(대소문자·띄어쓰기는 무시되므로 `Hyerim 2026`으로 입력해도 통과합니다)
+(대소문자·띄어쓰기는 무시됩니다. 저장소가 공개라면 **여기에 실제 코드를 남기지 말고**,
+03-5 배포 후 스크립트 속성에서만 설정하세요 — [06번 문서](06-operations.md) 참고)
 
 💾 **Ctrl+S로 저장**합니다.
 
@@ -131,8 +133,10 @@ const SETUP_REGISTER_CODE = 'hyerim2026';  // 학생들에게 알려줄 가입 �
 
 ## 이럴 때는
 
-**`setupAll` 실행 시 "SHEET_ID Script Property not set"**
-→ `SETUP_SHEET_ID`가 아직 `PASTE_SHEET_ID_HERE`입니다. 값을 채우고 저장 후 다시 실행하세요.
+**`setupAll` 실행 시 빨간 오류 — "잘못된 인수입니다" / "Invalid argument: id" 류**
+→ `SETUP_SHEET_ID`가 아직 `PASTE_SHEET_ID_HERE`이거나 시트 ID를 잘못 붙여넣었습니다.
+   02번 문서에서 `/d/` 와 `/edit` **사이의 문자열만** 복사했는지 확인하고 다시 실행하세요.
+   (실행 로그 위쪽에 `!! SHEET_ID가 placeholder입니다` 안내도 함께 나옵니다)
 
 **실행 로그에 "!! OAUTH_CLIENT_ID가 placeholder입니다"**
 → 01번 문서의 클라이언트 ID를 아직 안 넣었습니다. 넣고 `setupAll`을 다시 실행하세요.
