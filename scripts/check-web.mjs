@@ -288,6 +288,67 @@ check('★ loadMyData 실패 시 앱 화면을 그리지 않는다 (app.js)', ()
     'loadMyData ' + calls + '곳 중 실패 분기는 ' + guards + '곳뿐 — 나머지는 빈 화면을 그린다';
 });
 
+check('★ 화면 전환(hidden)을 CSS가 무력화하지 않는다', () => {
+  // 이 앱의 화면 3개(로그인·가입·앱)는 오직 hidden 속성으로 갈린다.
+  // 그런데 hidden의 display:none은 «브라우저 기본 스타일»이라, 우리 CSS의
+  // .cover{display:flex} 한 줄이 그것을 그대로 이긴다. 그러면 hidden을 걸어도
+  // 화면이 계속 보이고 세 화면이 위아래로 이어 붙는다.
+  //
+  // 실제로 그 상태로 배포되어 «로그인이 안 된다»로 신고됐다 (2026-07-30).
+  // 로그인은 성공하고 서버 응답도 정상이었는데 맨 위 로그인 화면이 그대로
+  // 보였을 뿐이다 — 어떤 테스트도 이걸 잡지 못했기에 규칙으로 세운다.
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  const css = read(path.join(WEB, 'css', 'app.css'));
+
+  const switchesByHidden = /\.hidden\s*=/.test(app);
+  if (!switchesByHidden) return true; // 전환 방식이 바뀌었다면 이 규칙은 해당 없음
+
+  // [hidden] 에 display:none 이 !important 로 걸려 있어야 한다.
+  const rule = /\[hidden\][^{]*\{[^}]*display\s*:\s*none\s*!important/i.test(css);
+  if (!rule) {
+    return 'app.js는 hidden으로 화면을 바꾸는데 css에 «[hidden]{display:none !important}»가 없다';
+  }
+
+  // 화면 컨테이너에 display를 지정하는 클래스가 실제로 존재하는지도 확인해 둔다
+  // (존재한다면 위 규칙이 없을 때 반드시 깨진다는 뜻이므로 규칙의 근거가 된다).
+  const html = read(path.join(WEB, 'index.html'));
+  const ids = ['screen-login', 'screen-register', 'screen-app'];
+  const missing = ids.filter((id) => !new RegExp('id="' + id + '"').test(html));
+  return missing.length === 0 || 'index.html에 없는 화면: ' + missing.join(', ');
+});
+
+check('★ 화면·탭을 옮기면 맨 위에서 시작한다', () => {
+  // 탭은 «다른 페이지»다. 옮겼는데 앞 화면의 스크롤 위치가 남아 있으면
+  // 내용이 중간부터 보여 «화면이 안 바뀐 것»처럼 읽힌다.
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  if (!/function\s+scrollToTop\s*\(/.test(app)) return 'scrollToTop 정의가 없다';
+
+  // ★ 정의부(`function scrollToTop()`)를 먼저 지우고 센다.
+  //   그러지 않으면 정의부가 호출 1건으로 잡혀, 실제 호출이 하나 빠져도
+  //   개수가 맞아 검사가 통과해 버린다 (이 규칙을 돌연변이 검증하다 발견).
+  const body = app.replace(/function\s+scrollToTop\s*\(\s*\)/g, 'FN_DEF');
+
+  // show()와 renderTab() **각각**에서 불려야 한다. 총 개수만 세면 한쪽에
+  // 두 번 불러도 통과하므로 함수별로 확인한다.
+  const fnBody = (name) => {
+    const m = new RegExp('function\\s+' + name + '\\s*\\([^)]*\\)\\s*\\{').exec(body);
+    if (!m) return null;
+    let depth = 0;
+    for (let i = m.index + m[0].length - 1; i < body.length; i++) {
+      if (body[i] === '{') depth++;
+      else if (body[i] === '}') { depth--; if (depth === 0) return body.slice(m.index, i + 1); }
+    }
+    return null;
+  };
+
+  const missing = ['show', 'renderTab'].filter((name) => {
+    const b = fnBody(name);
+    return !b || !/scrollToTop\(\)/.test(b);
+  });
+  return missing.length === 0 ||
+    'scrollToTop을 부르지 않는 함수: ' + missing.join(', ') + ' — 화면 전환과 탭 전환 모두에서 불러야 한다';
+});
+
 check('★ 호출하는 함수가 실제로 정의되어 있다 (편집 사고 방지)', () => {
   // 리팩터링 중 블록을 잘라내다 함수가 통째로 사라져도 구문 검사는 통과한다
   // (실제로 발생: failToLogin이 삭제됐는데 모든 검사가 PASS였다).
