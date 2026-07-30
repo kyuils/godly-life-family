@@ -1,0 +1,15 @@
+{
+  "name": "godly-life-family",
+  "version": "1.0.0",
+  "private": true,
+  "description": "청소년부 학생·학부모 경건생활 점검 웹앱 (Google Sheets + Apps Script + GitHub Pages)",
+  "//type": "'type: module'을 넣지 말 것 — web/js/mccheyne-plan.js는 UMD라 CommonJS require로 로드된다. 스크립트는 전부 .mjs이므로 불필요하다.",
+  "scripts": {
+    "test": "node scripts/check-web.mjs && node scripts/test-gas-actions.mjs && node scripts/test-stats.mjs && node scripts/test-library-data.mjs && node scripts/test-mccheyne.mjs",
+    "fetch-library": "node scripts/fetch-library.mjs",
+    "dev": "node scripts/mock-server.mjs 8788"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

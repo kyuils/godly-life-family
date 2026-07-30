@@ -1,0 +1,12 @@
+node_modules/
+.DS_Store
+Thumbs.db
+
+# 에이전트·도구가 만드는 스크래치
+.playwright-mcp/
+*.log
+
+# 비밀값 — 절대 커밋 금지
+.env
+.env.local
+.clasprc.json
