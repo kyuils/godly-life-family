@@ -47,14 +47,24 @@ function verifyIdToken(idToken) {
       { muteHttpExceptions: true }
     );
     if (res.getResponseCode() !== 200) {
+      // 실패 사유는 **실행 로그에만** 남긴다. 응답 본문에는 넣지 않는다
+      // (보안 불변식 6). 토큰 원문도 남기지 않는다.
+      console.log('[auth] tokeninfo HTTP ' + res.getResponseCode() +
+        ' body=' + String(res.getContentText()).slice(0, 200));
       return { ok: false, code: 'invalid_token' };
     }
     info = JSON.parse(res.getContentText());
   } catch (e) {
+    console.log('[auth] tokeninfo 호출 실패: ' + e);
     return { ok: false, code: 'tokeninfo_failed' };
   }
 
-  if (info.aud !== expectedAud) return { ok: false, code: 'aud_mismatch' };
+  if (info.aud !== expectedAud) {
+    // 값 전체가 아니라 앞 12자만 남긴다 — 어느 쪽이 틀렸는지 알기에는 충분하다.
+    console.log('[auth] aud 불일치 token=' + String(info.aud).slice(0, 12) +
+      '… expected=' + String(expectedAud).slice(0, 12) + '…');
+    return { ok: false, code: 'aud_mismatch' };
+  }
   if (info.iss !== 'accounts.google.com' && info.iss !== 'https://accounts.google.com') {
     return { ok: false, code: 'iss_mismatch' };
   }
