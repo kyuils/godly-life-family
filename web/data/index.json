@@ -1,0 +1,56 @@
+[
+ {
+  "id": "wcf",
+  "title": "웨스트민스터 신앙고백서",
+  "shortTitle": "신도게요서",
+  "type": "chapters",
+  "count": 33,
+  "file": "wcf.json",
+  "bytes": 116252
+ },
+ {
+  "id": "wsc",
+  "title": "웨스트민스터 소요리문답",
+  "shortTitle": "소요리문답",
+  "type": "catechism",
+  "count": 107,
+  "file": "wsc.json",
+  "bytes": 46178
+ },
+ {
+  "id": "wlc",
+  "title": "웨스트민스터 대요리문답",
+  "shortTitle": "대요리문답",
+  "type": "catechism",
+  "count": 196,
+  "file": "wlc.json",
+  "bytes": 162547
+ },
+ {
+  "id": "worship",
+  "title": "예배모범",
+  "shortTitle": "예배모범",
+  "type": "chapters",
+  "count": 17,
+  "file": "worship.json",
+  "bytes": 49418
+ },
+ {
+  "id": "creed",
+  "title": "12신조",
+  "shortTitle": "신조",
+  "type": "chapters",
+  "count": 3,
+  "file": "creed.json",
+  "bytes": 8749
+ },
+ {
+  "id": "heidelberg",
+  "title": "하이델베르크 요리문답",
+  "shortTitle": "하이델베르크 요리문답",
+  "type": "catechism",
+  "count": 129,
+  "file": "heidelberg.json",
+  "bytes": 89183
+ }
+]
