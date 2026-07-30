@@ -180,6 +180,20 @@
     textarea{font-family:inherit}
     #root{min-height:100dvh;display:flex;justify-content:center;background:var(--semantic-background-normal-alternative)}
 
+    /* ====== 화면 전환 (★ 이 앱의 화면 3개는 오직 이 규칙으로 갈린다) ======
+       app.js의 show()는 screen-login / screen-register / screen-app 에
+       hidden 속성을 걸고 벗기는 방식으로 화면을 바꾼다.
+
+       그런데 hidden의 «display:none»은 브라우저 기본 스타일이라,
+       .cover{display:flex} · .register{display:flex} 같은 우리 규칙이 그것을
+       그대로 덮어써 버린다. 그러면 hidden을 걸어도 화면이 계속 보이고,
+       세 화면이 위아래로 이어 붙은 한 장짜리 문서가 된다.
+
+       실제로 그 상태로 배포되어, 로그인에 성공해도 맨 위 로그인 화면이
+       그대로 보이는 바람에 «로그인이 안 된다»로 나타났다 (2026-07-30 실사용 신고).
+       화면 전환 방식을 바꾸더라도 이 한 줄은 남겨 둘 것. */
+    [hidden]{display:none !important}
+
     /* ====== APP SHELL ====== */
     .app{
       width:100%;max-width:var(--app-max);min-height:100dvh;
