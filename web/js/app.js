@@ -4,7 +4,7 @@
 import { APP_CONFIG } from './config.js';
 import * as api from './api.js';
 import * as auth from './auth.js';
-import { state, resetUserData, isTeacher } from './state.js';
+import { state, resetUserData, isTeacher, bumpGeneration } from './state.js';
 import * as S from './stats.js';
 import { el, escapeHtml, toast, closeSheet } from './ui.js';
 
@@ -188,6 +188,8 @@ function renderTab() {
   closeSheet();
   // 자료 탭의 지연 검색이 다른 탭 화면을 덮어쓰지 않도록 취소한다.
   viewLibrary.cancelPending();
+  // 진행 중이던 비동기 렌더가 뒤늦게 이 화면을 덮어쓰지 못하게 세대를 올린다.
+  bumpGeneration();
   switch (state.tab) {
     case 'today': viewToday.render(root); break;
     case 'calendar': viewCalendar.render(root); break;
@@ -224,6 +226,11 @@ window.addEventListener('app:session-expired', function () {
   viewPrayer.stashDraft();
   backToLogin('로그인이 만료되었습니다. 다시 로그인해 주세요. (쓰던 내용은 보관해 두었어요)');
 });
+// 같은 기기에서 다른 계정으로 로그인한 경우 — 앞사람의 임시 입력을 즉시 파기한다.
+window.addEventListener('app:account-changed', function () {
+  viewToday.clearDraft();
+  viewPrayer.clearDraft();
+});
 window.addEventListener('app:signed-out', function () {
   // 본인이 명시적으로 로그아웃한 경우다. 다음 사람에게 남기지 않는다 (계약 §6.1).
   viewToday.clearDraft();
@@ -236,10 +243,19 @@ window.addEventListener('app:signed-out', function () {
 // ---------------------------------------------------------------------------
 
 function start() {
-  if (APP_CONFIG.GAS_URL.indexOf('PASTE_') === 0) {
+  // 두 값을 모두 검사한다. 클라이언트 ID만 빠지면 구글 로그인이 조용히 실패해
+  // **버튼이 없는 표지 화면**만 남고, 원인이 콘솔에만 찍힌다.
+  const missing = [];
+  if (String(APP_CONFIG.GAS_URL).indexOf('PASTE_') === 0) missing.push('서버 주소(GAS_URL)');
+  // MOCK 모드(로컬 미리보기)는 구글 로그인을 건너뛰므로 클라이언트 ID가 필요 없다.
+  if (!auth.isMock() && String(APP_CONFIG.OAUTH_CLIENT_ID).indexOf('PASTE_') === 0) {
+    missing.push('구글 로그인 키(OAUTH_CLIENT_ID)');
+  }
+  if (missing.length) {
     show('screen-login');
     el('#login-notice').textContent =
-      '아직 서버 주소가 설정되지 않았습니다. docs/ops/ 문서의 설치 절차를 완료해 주세요.';
+      '아직 설정되지 않은 항목이 있습니다: ' + missing.join(', ') +
+      '. 설치문서(docs/ops/04번 1단계)를 완료해 주세요.';
     return;
   }
   renderLogin();

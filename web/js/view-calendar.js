@@ -2,7 +2,7 @@
 // 본인의 날주 기록을 한 달 달력으로 한눈에. 날짜를 누르면 그날 기록 상세.
 
 import * as api from './api.js';
-import { state } from './state.js';
+import { state, bumpGeneration, stale } from './state.js';
 import { todayStr } from './auth.js';
 import * as S from './stats.js';
 import { el, escapeHtml, nl2br, openSheet, toast, ymLabel } from './ui.js';
@@ -116,6 +116,7 @@ function cellHtml(c) {
  * months는 최대 6개이므로, 넘치면 가장 오래된 달을 버린다(현재 보는 달은 항상 유지).
  */
 async function ensureMonthLoaded(ym, root) {
+  const gen = bumpGeneration();
   if (state.months.indexOf(ym) >= 0) { render(root); return; }
   let months = state.months.concat([ym]);
   if (months.length > 6) {
@@ -123,6 +124,7 @@ async function ensureMonthLoaded(ym, root) {
     if (months.indexOf(ym) < 0) months = months.slice(1).concat([ym]);
   }
   const res = await api.call('getMyRecords', { months: months });
+  if (stale(gen)) return;              // 불러오는 사이 다른 탭으로 이동했다
   if (!res.ok) { toast(api.errorMessage(res.code)); return; }
   state.months = months;
   state.records = res.rows;

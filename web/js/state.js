@@ -36,6 +36,21 @@ export function resetUserData() {
   state.classWindowDays = 60;
 }
 
+// 화면 세대(generation). renderTab()이 호출될 때마다 1 증가한다.
+// 비동기 렌더(fetch await 후 root.innerHTML)가 그 사이에 탭이 바뀐 것을 모르고
+// #view를 덮어쓰는 것을 막는다 — await 직후 stale()로 확인하고 빠져나온다.
+let generation = 0;
+
+export function bumpGeneration() {
+  generation += 1;
+  return generation;
+}
+
+/** 이 세대가 더 이상 화면에 있지 않으면 true — 그리기를 중단해야 한다. */
+export function stale(gen) {
+  return gen !== generation;
+}
+
 export function isTeacher() {
   return !!state.session && (state.session.role === 'teacher' || state.session.role === 'admin');
 }

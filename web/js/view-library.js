@@ -1,22 +1,26 @@
 // web/js/view-library.js — 자료 탭 (요구사항 4).
 //
-// 참고자료는 web/data/*.json 정적 파일이다(서버 왕복 없음, 오프라인 열람 가능).
+// 참고자료는 web/data/*.json 정적 파일이다(서버 왕복 없음).
 // 목록(index.json)만 먼저 읽고 본문은 문서를 열 때 지연 로드한다 (계약 §5.3).
 // 화면 하단에 출처·저작권·이용조건을 항상 노출한다 (계약 §5.5.1).
 
-import { state } from './state.js';
+import { state, bumpGeneration, stale } from './state.js';
 import { el, escapeHtml, nl2br, toast } from './ui.js';
 
 let openDocId = null;
 let query = '';
 
 export async function render(root) {
+  const gen = bumpGeneration();
   if (!state.library) {
     root.innerHTML = '<div class="loading">자료를 불러오는 중...</div>';
     try {
       const res = await fetch('data/index.json');
-      state.library = await res.json();
+      const data = await res.json();
+      if (stale(gen)) return;          // 그 사이 다른 탭으로 이동했다
+      state.library = data;
     } catch (e) {
+      if (stale(gen)) return;
       root.innerHTML = '<div class="empty-note">자료를 불러오지 못했습니다.</div>';
       return;
     }
@@ -47,21 +51,26 @@ function countLabel(d) {
 }
 
 async function renderDoc(root, id) {
+  const gen = bumpGeneration();
   let doc = state.libraryDocs[id];
   if (!doc) {
     root.innerHTML = '<div class="loading">불러오는 중...</div>';
     const meta = state.library.find(function (x) { return x.id === id; });
     try {
       const res = await fetch('data/' + meta.file);
-      doc = await res.json();
+      const parsed = await res.json();
+      if (stale(gen)) return;          // 로딩 중에 탭이 바뀌었다 — 덮어쓰지 않는다
+      doc = parsed;
       state.libraryDocs[id] = doc;
     } catch (e) {
+      if (stale(gen)) return;
       toast('본문을 불러오지 못했습니다.');
       openDocId = null;
       renderList(root);
       return;
     }
   }
+  if (stale(gen)) return;
 
   const items = doc.type === 'catechism' ? doc.items : doc.sections;
   const filtered = query ? items.filter(function (it) { return matches(it, query); }) : items;

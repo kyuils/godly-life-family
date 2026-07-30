@@ -14,12 +14,25 @@ let editDate = null; // null이면 오늘
 // token_expired → 로그인 화면 전환이 일어나는데, 그때 입력이 통째로 사라지면
 // 청소년 사용자가 유일하게 긴 글을 쓰는 화면에서 데이터를 잃는다.
 // (2026-07-30 최종 검토 [중대] 지적) — 메모리에만 두므로 계약 §6.1을 위반하지 않는다.
-let draft = null; // { date, wordRead, verse, resolution, intercession }
+let draft = null; // { email, date, wordRead, verse, resolution, intercession }
 
+/**
+ * ★ draft에는 반드시 **소유자 email**을 함께 보관한다.
+ * 이게 없으면 세션 만료 후 같은 폰에서 **다른 가족이 로그인했을 때** 앞사람이 쓰던
+ * 고백문이 복원되고, 저장하면 뒷사람 이름으로 시트에 기록되어 교사 화면에까지
+ * 잘못 귀속된다 — CLAUDE.md 보안 불변식 7의 직접 위반이다.
+ * (세션 만료를 보완하려던 수정이 오히려 유출 경로를 만들었다 — 2026-07-30 3차 검토)
+ *
+ * api.getSessionEmail()은 이 시점에 이미 비워져 있으므로(clearSession이 먼저 실행됨)
+ * 아직 남아 있는 state.session.email을 쓴다.
+ */
 export function stashDraft() {
   const w = el('#t-word');
   if (!w) return; // 오늘 탭이 화면에 없으면 보관할 것도 없다
+  const owner = state.session && state.session.email;
+  if (!owner) return;
   draft = {
+    email: owner,
     date: targetDate(),
     wordRead: w.classList.contains('checked'),
     verse: el('#t-verse').value,
@@ -43,7 +56,17 @@ function targetDate() {
  * (2026-07-30 2차 검토 지적).
  */
 export function restoreDraftContext() {
-  if (draft && draft.date !== todayStr()) editDate = draft.date;
+  if (!draft) return;
+  const today = todayStr();
+  if (draft.date === today) return;                 // 그대로 오늘 화면에서 복원된다
+  if (draft.date === addDays(today, -1)) {          // 어제 편집 중이었다
+    editDate = draft.date;
+    return;
+  }
+  // 로그인 화면에 둔 채 자정을 넘겨 draft가 '그저께 이전'이 된 경우.
+  // 서버가 저장을 거부하는 날짜라(계약 §4.2) 복원해 봐야 "입력을 확인하세요"만 뜬다.
+  // 원인을 알 수 없는 실패를 남기느니 조용히 버린다.
+  draft = null;
 }
 
 function recordFor(date) {
@@ -105,7 +128,9 @@ export function render(root) {
   el('#t-res').value = rec ? rec.resolution : '';
 
   // 세션이 끊겨 재로그인한 경우, 쓰던 내용을 되살린다.
-  if (draft && draft.date === date) {
+  // **같은 사람이 다시 로그인했을 때만** 복원한다 (보안 불변식 7).
+  const me = state.session && state.session.email;
+  if (draft && draft.email === me && draft.date === date) {
     el('#t-verse').value = draft.verse;
     el('#t-res').value = draft.resolution;
     el('#t-word').classList.toggle('checked', draft.wordRead);

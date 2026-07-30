@@ -17,11 +17,13 @@ const expanded = new Set();
 
 // 작성 중이던 기도제목(최대 1000자). 세션 만료로 화면이 갈아엎히면 여기 보관했다가
 // 재로그인 후 되살린다 — «오늘» 탭과 동일한 이유다(계약 §6.3 취지).
-let draft = null;
+let draft = null; // { email, text }
 
+/** ★ 소유자 email을 함께 보관한다 — 이유는 view-today.js의 stashDraft 주석 참조. */
 export function stashDraft() {
   const ta = el('#p-new');
-  if (ta && ta.value.trim()) draft = ta.value;
+  const owner = state.session && state.session.email;
+  if (ta && owner && ta.value.trim()) draft = { email: owner, text: ta.value };
 }
 
 export function clearDraft() {
@@ -45,8 +47,9 @@ export function render(root) {
         groups.map(groupHtml).join('')
       : '<div class="empty-note">아직 요청한 기도가 없어요.</div>');
 
-  if (draft) {
-    el('#p-new').value = draft;
+  // 같은 사람이 다시 로그인했을 때만 복원한다 (보안 불변식 7).
+  if (draft && draft.email === (state.session && state.session.email)) {
+    el('#p-new').value = draft.text;
     draft = null;
     toast('작성 중이던 기도 제목을 되살렸어요.');
   }

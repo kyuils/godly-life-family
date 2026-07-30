@@ -151,7 +151,44 @@ await t('기도 쓰기 후 getMyPrayers 캐시가 무효화된다', async () => 
   return r.rows[0] === '새 기도' || '무효화되지 않음';
 });
 
-console.log('\n--- 세션 만료 / busy 재시도 ---');
+console.log('\n--- 네트워크 실패 정규화 ---');
+
+await t('★ fetch가 던지면 예외가 아니라 network_error 응답이 온다', async () => {
+  // 이게 없으면 호출부(afterSignIn/loadMyData/달력/우리반)가 res.ok 분기를 타지 못하고
+  // 처리되지 않은 rejection으로 사라져 **화면이 말없이 멈춘다.**
+  // GAS를 '사용자로 실행'으로 잘못 배포했을 때 실제로 발생하는 경로다.
+  api.clearSession();
+  api.setSession('n@example.com', 't');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new TypeError('Failed to fetch'); };
+  try {
+    const r = await api.call('whoami', {}, { noCache: true });
+    if (r === undefined || r === null) return '응답이 없음(예외가 새어나감)';
+    return (r.ok === false && r.code === 'network_error') || JSON.stringify(r);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+await t('HTTP 오류 응답(500 등)도 network_error로 정규화된다', async () => {
+  api.clearSession();
+  api.setSession('n2@example.com', 't');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: false, status: 500, json: async () => ({}) });
+  try {
+    const r = await api.call('whoami', {}, { noCache: true });
+    return (r && r.ok === false && r.code === 'network_error') || JSON.stringify(r);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+await t('network_error 문구가 인터넷과 배포 설정을 함께 안내한다', () => {
+  const m = api.errorMessage('network_error');
+  return (m.indexOf('인터넷') >= 0 && m.indexOf('설정') >= 0) || m;
+});
+
+console.log('\n--- 세션 만료 ---');
 
 await t('token_expired면 세션을 버리고 이벤트를 쏜다', async () => {
   api.clearSession();

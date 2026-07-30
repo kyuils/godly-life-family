@@ -146,7 +146,7 @@ export async function call(action, params, opts) {
 export function errorMessage(code) {
   const MAP = {
     busy: '지금 접속이 몰리고 있어요. 잠시 후 다시 시도해 주세요.',
-    network_error: '서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요. 계속 그러면 담임교사에게 알려주세요.',
+    network_error: '서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요. 계속 그러면 담임교사에게 알려주세요 — 서버 배포 설정(설치문서 03번 5단계) 문제일 수 있습니다.',
     conflict: '방금 기록이 저장되지 않았어요. 잠시 후 다시 시도해 주세요.',
     forbidden: '권한이 없습니다.',
     unauthorized: '등록되지 않은 계정입니다.',

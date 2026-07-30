@@ -3,7 +3,9 @@
 // 캐시 전략은 자산 성격에 따라 둘로 나눈다.
 //
 //   1) 참고자료(data/*.json)와 아이콘 → cache-first
-//      내용이 사실상 바뀌지 않고 크기가 크다(총 470KB). 오프라인 열람의 근거다.
+//      내용이 사실상 바뀌지 않고 크기가 크다(총 470KB).
+//      ※ 앱을 새로 켜면 로그인이 필요하므로 '완전 오프라인 기동'은 불가능하다.
+//         이 캐시가 보장하는 것은 '쓰는 중에 회선이 끊겨도 계속 볼 수 있다'까지다(계약 §5.1).
 //
 //   2) 앱 자체(HTML/CSS/JS) → **network-first** (오프라인일 때만 캐시)
 //      cache-first로 두면 코드를 고쳐 배포해도 **BUILD_TAG를 올리는 것을 잊는 순간
@@ -89,10 +91,10 @@ self.addEventListener('fetch', function (e) {
   // 회선에서는 실패하지 않고 계속 매달린다.** 그러면 앱 시작이 무한정 늦어진다.
   // 3초 안에 응답이 없으면 캐시본으로 먼저 띄우고, 네트워크 응답은 도착하는 대로
   // 캐시에 넣어 다음 실행에 반영한다.
-  e.respondWith(networkFirst(req));
+  e.respondWith(networkFirst(e, req));
 });
 
-function networkFirst(req) {
+function networkFirst(e, req) {
   const network = fetch(req).then(function (res) {
     if (res && res.ok && res.type === 'basic') {
       const copy = res.clone();
@@ -104,6 +106,10 @@ function networkFirst(req) {
   const timeout = new Promise(function (resolve) {
     setTimeout(function () { resolve(null); }, 3000);
   });
+
+  // 타임아웃이 이겨서 respondWith가 먼저 끝나도, 늦게 도착한 응답을 캐시에 넣는 작업이
+  // SW 종료로 유실되지 않도록 이벤트 수명을 연장한다.
+  try { e.waitUntil(network.catch(function () {})); } catch (err) { /* 무시 */ }
 
   return Promise.race([network.catch(function () { return null; }), timeout])
     .then(function (res) {

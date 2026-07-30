@@ -26,6 +26,9 @@ function applyToken(email, idToken) {
   if (prev && prev !== String(email).toLowerCase()) {
     api.clearCache();
     resetUserData();
+    // 화면 모듈이 들고 있는 임시 입력(draft)까지 파기하라고 알린다.
+    // 여기서 뷰를 직접 import하면 순환 참조가 되므로 이벤트로 전달한다.
+    window.dispatchEvent(new CustomEvent('app:account-changed'));
   }
   api.setSession(email, idToken);
 }

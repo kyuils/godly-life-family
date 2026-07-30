@@ -4,7 +4,7 @@
 // 교사는 기도제목을 읽을 수만 있고 응답 체크·삭제는 할 수 없다(본인만 — 사용자 결정).
 
 import * as api from './api.js';
-import { state } from './state.js';
+import { state, bumpGeneration, stale } from './state.js';
 import { todayStr } from './auth.js';
 import * as S from './stats.js';
 import { el, escapeHtml, nl2br, openSheet, toast, shortDate } from './ui.js';
@@ -13,6 +13,7 @@ let kindTab = 'student';
 let subTab = 'records';
 
 export async function render(root) {
+  const gen = bumpGeneration();
   if (state.classRecords === null) {
     root.innerHTML = '<div class="loading">불러오는 중...</div>';
     const [rec, pray, mem] = await Promise.all([
@@ -20,6 +21,7 @@ export async function render(root) {
       api.call('getAllPrayers', { days: 180 }),
       api.call('getMembers', {}),
     ]);
+    if (stale(gen)) return;            // 불러오는 사이 다른 탭으로 이동했다
     if (!rec.ok || !pray.ok || !mem.ok) {
       const bad = [rec, pray, mem].find(function (r) { return !r.ok; });
       root.innerHTML = '<div class="empty-note">' + escapeHtml(api.errorMessage(bad.code)) + '</div>';
