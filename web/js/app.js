@@ -61,7 +61,10 @@ async function afterSignIn() {
     return;
   }
   show('screen-login');
-  el('#login-notice').textContent = api.errorMessage(res.code);
+  // 코드를 함께 보여 준다. 비개발자 운영자가 화면만 보고도 원인을 그대로 전달할 수
+  // 있어야 docs/ops의 «이럴 때는» 표를 찾아갈 수 있다 (2026-07-30 설치 후 실제 신고:
+  // «로그인이 안 되고 로그인 화면으로 돌아온다» — 화면에 코드가 없어 진단이 막혔다).
+  el('#login-notice').textContent = api.errorMessage(res.code) + ' [' + res.code + ']';
 }
 
 // ---------------------------------------------------------------------------
@@ -174,7 +177,8 @@ function failToLogin(code) {
     forbidden: '권한이 없습니다.',
   };
   el('#login-notice').textContent =
-    '기록을 불러오지 못했습니다. ' + (CAUSE[code] || '잠시 후 다시 시도해 주세요.');
+    '기록을 불러오지 못했습니다. ' + (CAUSE[code] || '잠시 후 다시 시도해 주세요.') +
+    ' [' + code + ']';
 }
 
 // ---------------------------------------------------------------------------
@@ -248,12 +252,16 @@ function backToLogin(message) {
   el('#login-notice').textContent = message || '';
 }
 
-window.addEventListener('app:session-expired', function () {
+window.addEventListener('app:session-expired', function (e) {
   // 화면을 갈아엎기 전에 작성 중이던 내용을 메모리에 보관한다.
   // 재로그인하면 해당 탭이 그대로 되살린다.
   viewToday.stashDraft();
   viewPrayer.stashDraft();
-  backToLogin('로그인이 만료되었습니다. 다시 로그인해 주세요. (쓰던 내용은 보관해 두었어요)');
+  // 어떤 액션이 어떤 코드로 끊겼는지 화면에 남긴다 — 이 경로가 «로그인했는데
+  // 로그인 화면으로 되돌아오는» 유일한 자동 경로다.
+  const d = (e && e.detail) || {};
+  const tag = d.code ? ' [' + d.code + (d.action ? '@' + d.action : '') + ']' : '';
+  backToLogin('로그인이 만료되었습니다. 다시 로그인해 주세요. (쓰던 내용은 보관해 두었어요)' + tag);
 });
 // 같은 기기에서 다른 계정으로 로그인한 경우 — 앞사람의 임시 입력을 즉시 파기한다.
 window.addEventListener('app:account-changed', function () {
@@ -265,6 +273,30 @@ window.addEventListener('app:signed-out', function () {
   viewToday.clearDraft();
   viewPrayer.clearDraft();
   backToLogin('');
+});
+
+// ---------------------------------------------------------------------------
+// 예기치 못한 오류 — 조용히 실패하지 않는다
+// ---------------------------------------------------------------------------
+//
+// 화면을 그리는 도중 예외가 나면 여태까지는 콘솔에만 남고 사용자에게는
+// «아무 일도 안 일어난 화면»으로 보였다. 비개발자 운영자에게는 진단 수단이
+// 아예 없는 상태다. 무엇이 터졌는지 화면에 남긴다 (2026-07-30 설치 후 신고).
+function showUnexpected(what) {
+  const notice = document.getElementById('login-notice');
+  if (!notice) return;
+  const login = document.getElementById('screen-login');
+  if (login && login.hidden) return; // 앱 화면이 정상히 떠 있으면 건드리지 않는다
+  notice.textContent = '예기치 못한 오류가 났습니다. 이 문구를 담임교사에게 알려 주세요. ' +
+    '[' + String(what).slice(0, 160) + ']';
+}
+
+window.addEventListener('error', function (e) {
+  showUnexpected((e && e.message) || 'error');
+});
+window.addEventListener('unhandledrejection', function (e) {
+  const r = e && e.reason;
+  showUnexpected((r && (r.message || r)) || 'rejection');
 });
 
 // ---------------------------------------------------------------------------
