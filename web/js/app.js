@@ -33,12 +33,42 @@ function show(screen) {
 // 로그인
 // ---------------------------------------------------------------------------
 
+/**
+ * 이 탭에서 앱이 몇 번째로 «처음부터» 시작됐는지.
+ *
+ * 로그인 뒤에 이 숫자가 올라가 있으면, 화면이 되돌아간 것이 아니라
+ * **브라우저가 페이지를 새로 읽은 것**이다. 모바일에서 로그인 창을 다녀오는
+ * 사이 원래 탭이 버려지면 이런 일이 생기고, 그러면 메모리에만 있던 로그인
+ * 정보가 함께 사라져 로그인 화면으로 «돌아온 것처럼» 보인다.
+ * 이 둘은 고치는 방법이 완전히 다르므로 구분할 수단이 필요하다.
+ *
+ * 저장소(localStorage/sessionStorage)는 쓰지 않는다 — 이 앱은 어떤 사용자 데이터도
+ * 기기에 남기지 않으며, 그 규칙은 npm test가 강제한다. 대신 탭 수명 동안만
+ * 유지되는 window.name에 숫자 하나만 둔다(사용자 데이터가 아니다).
+ */
+function appStartCount() {
+  try {
+    const PREFIX = 'godly-start-';
+    const cur = String(window.name || '');
+    const prev = cur.indexOf(PREFIX) === 0 ? Number(cur.slice(PREFIX.length)) : 0;
+    const n = (isFinite(prev) && prev > 0 ? prev : 0) + 1;
+    window.name = PREFIX + n;
+    return n;
+  } catch (e) {
+    return 0; // 판정 불가
+  }
+}
+const APP_STARTS = appStartCount();
+
 function renderLogin() {
   closeSheet();
   show('screen-login');
   const holder = el('#gis-button');
   holder.innerHTML = '';
   auth.initGis(holder, afterSignIn);
+  if (APP_STARTS > 1) {
+    el('#login-notice').textContent = '앱 시작 #' + APP_STARTS;
+  }
 }
 
 async function afterSignIn() {
