@@ -317,6 +317,30 @@ check('★ 화면 전환(hidden)을 CSS가 무력화하지 않는다', () => {
   return missing.length === 0 || 'index.html에 없는 화면: ' + missing.join(', ');
 });
 
+check('★ 메뉴(#nav)가 본문(#view)보다 앞에 있다', () => {
+  // .topnav는 제목줄 바로 아래에 붙도록 만든 스타일이라, 마크업에서 본문 뒤에
+  // 두면 화면 맨 아래에 깔린다. 그러면 탭이 보이지 않아 다른 화면으로 갈
+  // 방법이 사라진다 (2026-07-30 실사용 신고: «메뉴가 아래 있어서 안 보인다»).
+  const html = read(path.join(WEB, 'index.html'));
+  const iNav = html.indexOf('id="nav"');
+  const iView = html.indexOf('id="view"');
+  if (iNav < 0 || iView < 0) return '#nav 또는 #view를 찾지 못함';
+  return iNav < iView ||
+    '메뉴가 본문 뒤에 있다 — 화면 맨 아래에 깔려 탭이 보이지 않는다';
+});
+
+check('★ 탭 버튼은 손가락으로 누를 만큼 크다', () => {
+  // 탭 하나하나가 다른 화면으로 가는 문이다. 글자만 작게 한 줄로 두면
+  // 휴대폰에서 누르기 어렵다. 아이콘·글자를 각각의 span으로 나누어
+  // 세로로 쌓는 구조를 유지한다.
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  const css = read(path.join(WEB, 'css', 'app.css'));
+  const marks = ['tab-icon', 'tab-label'].filter((c) => !app.includes(c));
+  if (marks.length) return 'app.js가 탭을 그릴 때 빠뜨린 요소: ' + marks.join(', ');
+  const styled = ['tab-icon', 'tab-label'].filter((c) => !new RegExp('\\.' + c + '\\s*\\{').test(css));
+  return styled.length === 0 || 'css에 크기 규칙이 없는 요소: ' + styled.join(', ');
+});
+
 check('★ 화면·탭을 옮기면 맨 위에서 시작한다', () => {
   // 탭은 «다른 페이지»다. 옮겼는데 앞 화면의 스크롤 위치가 남아 있으면
   // 내용이 중간부터 보여 «화면이 안 바뀐 것»처럼 읽힌다.
