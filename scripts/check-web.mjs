@@ -1,0 +1,224 @@
+#!/usr/bin/env node
+// scripts/check-web.mjs — 프론트엔드 정적 검사.
+//
+// 목적 (계약 §6.1 / CLAUDE.md 완료 기준):
+//   1) 개발용 MOCK 설정이 커밋에 섞여 들어가지 않게 막는다.
+//   2) 프론트 캐시가 email로 스코핑되고 메모리에만 있는지 확인한다
+//      — 이걸 어기면 가족이 폰을 공유할 때 남의 기도제목이 보인다.
+//   3) 모듈 import 경로가 실재하는지, 참조한 자산이 있는지 확인한다.
+//
+// 실패 시 exit 1. 통과 시 exit 0 + "ALL CHECKS PASSED".
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.join(__dirname, '..');
+const WEB = path.join(ROOT, 'web');
+const JS = path.join(WEB, 'js');
+
+let pass = 0;
+const failures = [];
+
+function check(label, fn) {
+  try {
+    const r = fn();
+    if (r === true || r === undefined) { pass++; console.log('  [PASS] ' + label); return; }
+    failures.push(label + ' — ' + r);
+    console.log('  [FAIL] ' + label + ' — ' + r);
+  } catch (e) {
+    failures.push(label + ' — ' + (e && e.message ? e.message : e));
+    console.log('  [FAIL] ' + label + ' — ' + (e && e.message ? e.message : e));
+  }
+}
+
+const read = (p) => fs.readFileSync(p, 'utf8');
+
+/**
+ * 주석을 제거한 코드만 남긴다.
+ * 이 검사기는 "금지어가 소스에 있는가"를 보는데, 주석에서 그 금지어를 *설명*하는
+ * 문장까지 걸리면 오탐이 난다. 오탐을 내는 검사기는 곧 무시당하므로 정확해야 한다.
+ * ('//'가 ':' 뒤에 오는 경우는 https:// 같은 URL이므로 주석으로 보지 않는다)
+ */
+function codeOnly(src) {
+  return String(src)
+    // ★ 줄 주석을 먼저 지운다. 순서를 바꾸면, 주석 안에 쓴 경로("web/data/*.json")의
+    //   '/*' 가 블록 주석 시작으로 오인돼 그 뒤 코드를 통째로 삼킨다(2026-07-30 실제 발생).
+    .split('\n')
+    .map((line) => line.replace(/(^|[^:])\/\/.*$/, '$1'))
+    .join('\n')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+console.log('=== 프론트엔드 정적 검사 ===\n');
+
+// --- 1) 배포 설정이 placeholder 상태인가 -----------------------------------
+console.log('--- 배포 설정 (커밋 사고 방지) ---');
+const config = codeOnly(read(path.join(JS, 'config.js')));
+
+check('config.js의 MOCK이 null (개발용 로그인 우회가 켜진 채 커밋 금지)', () => {
+  const m = config.match(/MOCK\s*:\s*([^,\n]+)/);
+  if (!m) return 'MOCK 항목을 찾지 못함';
+  const v = m[1].trim();
+  return v === 'null' || 'MOCK=' + v + ' — 커밋 전 null로 되돌리세요';
+});
+
+check('config.js의 GAS_URL이 로컬 주소가 아님', () => {
+  const m = config.match(/GAS_URL\s*:\s*'([^']*)'/);
+  if (!m) return 'GAS_URL 항목을 찾지 못함';
+  const v = m[1];
+  if (v.indexOf('/api') === 0 || v.indexOf('localhost') >= 0) {
+    return "GAS_URL='" + v + "' — 미리보기 설정이 남아 있습니다";
+  }
+  return true;
+});
+
+check('config.js에 시트 ID·등록 코드가 없다 (서버에만 두어야 함)', () => {
+  const bad = ['SHEET_ID', 'REGISTER_CODE', 'docs.google.com/spreadsheets'];
+  const hit = bad.filter((b) => config.indexOf(b) >= 0);
+  return hit.length === 0 || '발견: ' + hit.join(', ');
+});
+
+// --- 2) 캐시 격리 (계약 §6.1) ----------------------------------------------
+console.log('\n--- 캐시 격리 (가족 공용 기기 대비) ---');
+const api = codeOnly(read(path.join(JS, 'api.js')));
+
+check('캐시 키에 세션 email이 접두된다', () => {
+  const m = api.match(/function cacheKey\([\s\S]*?\n\}/);
+  if (!m) return 'cacheKey 함수를 찾지 못함';
+  return /currentEmail/.test(m[0]) || 'cacheKey가 currentEmail을 쓰지 않음';
+});
+
+check('캐시가 localStorage/sessionStorage를 쓰지 않는다', () => {
+  const hit = ['localStorage', 'sessionStorage', 'indexedDB'].filter((s) => api.indexOf(s) >= 0);
+  return hit.length === 0 || '발견: ' + hit.join(', ');
+});
+
+check('어떤 프론트 파일도 토큰·기록을 브라우저 저장소에 남기지 않는다', () => {
+  const offenders = [];
+  fs.readdirSync(JS).filter((f) => f.endsWith('.js')).forEach((f) => {
+    if (f === 'mccheyne-plan.js') return; // 성경읽기표 데이터(계승 파일)
+    const s = codeOnly(read(path.join(JS, f)));
+    if (/localStorage|sessionStorage|document\.cookie/.test(s)) offenders.push(f);
+  });
+  return offenders.length === 0 || '발견: ' + offenders.join(', ');
+});
+
+check('계정 전환·로그아웃 시 캐시를 파기하는 코드가 있다', () => {
+  const auth = codeOnly(read(path.join(JS, 'auth.js')));
+  const hasSwitch = /clearCache\(\)/.test(auth) && /resetUserData\(\)/.test(auth);
+  const hasSignOut = /clearSession\(\)/.test(auth);
+  return (hasSwitch && hasSignOut) || 'auth.js에 캐시 파기 경로가 없음';
+});
+
+check('setSession이 이메일 변경을 감지해 캐시를 비운다', () =>
+  /currentEmail\s*&&\s*currentEmail\s*!==/.test(api) || 'api.setSession에 계정 전환 감지가 없음');
+
+// --- 3) 서비스워커 (계약 §6.2) ---------------------------------------------
+console.log('\n--- 서비스워커 ---');
+const sw = codeOnly(read(path.join(WEB, 'sw.js')));
+check('GET이 아닌 요청(=GAS POST)은 가로채지 않는다', () =>
+  /req\.method\s*!==\s*'GET'/.test(sw) || 'POST 제외 로직이 없음');
+check('다른 출처(구글 로그인·GAS)는 캐시하지 않는다', () =>
+  /url\.origin\s*!==\s*self\.location\.origin/.test(sw) || '출처 검사가 없음');
+check('skipWaiting + clients.claim으로 즉시 교체된다', () =>
+  (/skipWaiting/.test(sw) && /clients\.claim/.test(sw)) || '즉시 활성화 로직이 없음');
+check('캐시명에 BUILD_TAG가 들어간다', () =>
+  /CACHE\s*=\s*'[^']*'\s*\+\s*BUILD_TAG/.test(sw) || '캐시명이 버전과 무관함');
+
+// --- 4) XSS 방어 ------------------------------------------------------------
+console.log('\n--- 출력 이스케이프 ---');
+check('사용자 입력을 innerHTML에 넣는 화면 파일이 escapeHtml을 쓴다', () => {
+  const views = fs.readdirSync(JS).filter((f) => f.indexOf('view-') === 0);
+  const missing = views.filter((f) => {
+    const s = codeOnly(read(path.join(JS, f)));
+    return /innerHTML/.test(s) && !/escapeHtml/.test(s);
+  });
+  return missing.length === 0 || 'escapeHtml 미사용: ' + missing.join(', ');
+});
+
+// --- 5) 모듈 그래프 ---------------------------------------------------------
+console.log('\n--- 모듈·자산 참조 ---');
+check('모든 상대 import 경로가 실재한다', () => {
+  const broken = [];
+  fs.readdirSync(JS).filter((f) => f.endsWith('.js')).forEach((f) => {
+    const s = read(path.join(JS, f));
+    const re = /from\s+'(\.\/[^']+)'/g;
+    let m;
+    while ((m = re.exec(s))) {
+      if (!fs.existsSync(path.join(JS, m[1]))) broken.push(f + ' -> ' + m[1]);
+    }
+  });
+  return broken.length === 0 || broken.join(', ');
+});
+
+check('index.html이 참조하는 로컬 파일이 실재한다', () => {
+  const html = read(path.join(WEB, 'index.html'));
+  const refs = [];
+  const re = /(?:src|href)="(?!https?:|#)([^"]+)"/g;
+  let m;
+  while ((m = re.exec(html))) refs.push(m[1]);
+  const missing = refs.filter((r) => !fs.existsSync(path.join(WEB, r)));
+  return missing.length === 0 || '없음: ' + missing.join(', ');
+});
+
+check('manifest가 참조하는 아이콘이 실재한다', () => {
+  const mf = JSON.parse(read(path.join(WEB, 'manifest.webmanifest')));
+  const missing = mf.icons.map((i) => i.src).filter((s, i, a) => a.indexOf(s) === i)
+    .filter((s) => !fs.existsSync(path.join(WEB, s)));
+  return missing.length === 0 || '없음: ' + missing.join(', ');
+});
+
+check('참고자료 index.json의 파일이 모두 실재한다', () => {
+  const idx = JSON.parse(read(path.join(WEB, 'data', 'index.json')));
+  const missing = idx.map((e) => e.file).filter((f) => !fs.existsSync(path.join(WEB, 'data', f)));
+  return missing.length === 0 || '없음: ' + missing.join(', ');
+});
+
+// --- 6) 문법 --------------------------------------------------------------
+console.log('\n--- 문법 ---');
+check('모든 web/js 파일이 구문 오류 없이 파싱된다', () => {
+  const bad = [];
+  fs.readdirSync(JS).filter((f) => f.endsWith('.js')).forEach((f) => {
+    const s = read(path.join(JS, f));
+    if (f === 'mccheyne-plan.js') {
+      try { new Function(s); } catch (e) { bad.push(f + ': ' + e.message); }
+      return;
+    }
+    // ES module은 Function으로 못 만드므로 import/export를 지운 뒤 확인한다.
+    // export 키워드만 떼어낸다 — 'export async function', 'export default' 등
+    // 모든 형태를 다루려면 뒤에 오는 토큰을 열거하지 않는 편이 안전하다.
+    const stripped = s
+      .replace(/^\s*import[\s\S]*?;$/gm, '')
+      .replace(/^\s*export\s*\{[^}]*\}\s*;?$/gm, '')
+      .replace(/^(\s*)export\s+default\s+/gm, '$1')
+      .replace(/^(\s*)export\s+/gm, '$1');
+    try { new Function(stripped); } catch (e) { bad.push(f + ': ' + e.message); }
+  });
+  return bad.length === 0 || bad.join(' | ');
+});
+
+check('소스에 제어문자가 리터럴로 박혀 있지 않다', () => {
+  const bad = [];
+  const dirs = [JS, path.join(WEB, 'css')];
+  dirs.forEach((d) => {
+    fs.readdirSync(d).forEach((f) => {
+      const s = read(path.join(d, f));
+      for (let i = 0; i < s.length; i++) {
+        const c = s.charCodeAt(i);
+        if (c < 32 && c !== 9 && c !== 10 && c !== 13) { bad.push(f); return; }
+      }
+    });
+  });
+  return bad.length === 0 || bad.join(', ');
+});
+
+console.log('\n=== 결과 ===');
+console.log('PASS: ' + pass + ', FAIL: ' + failures.length);
+if (failures.length) {
+  console.log('\nFAILED:');
+  failures.forEach((f) => console.log('  - ' + f));
+  process.exit(1);
+}
+console.log('ALL CHECKS PASSED');
