@@ -1,0 +1,558 @@
+/* ============================================================
+   경건생활 앱 (청소년부·학부모) — 디자인 시스템
+   선행 저장소 kyuils/godly-life-check 의 인라인 <style>을 그대로 계승.
+   (출석부 youth_group → godly-life-check → 이 앱)
+   신규 화면(달력·기도·자료)용 스타일은 파일 하단에 추가한다.
+   ============================================================ */
+
+    /* ============================================================
+       Montage Design System (WDS) — 경건생활 점검 적용
+       출석부(youth_group)의 tokens + components inline 복제 (R9).
+       출석 5색(--att-*) 대신 경건생활 4색(--dev-*)으로 매핑.
+       ============================================================ */
+
+    /* ── Montage atomic + semantic + type + space + radius + shadow tokens ── */
+    :root {
+      /* Common */
+      --atomic-common-0: #000000; --atomic-common-100: #ffffff;
+
+      /* Cool Neutral */
+      --atomic-coolNeutral-5: #0F0F10; --atomic-coolNeutral-7: #141415; --atomic-coolNeutral-10: #171719;
+      --atomic-coolNeutral-15: #1B1C1E; --atomic-coolNeutral-17: #212225; --atomic-coolNeutral-20: #292A2D;
+      --atomic-coolNeutral-22: #2E2F33; --atomic-coolNeutral-23: #333438; --atomic-coolNeutral-25: #37383C;
+      --atomic-coolNeutral-30: #46474C; --atomic-coolNeutral-40: #5A5C63; --atomic-coolNeutral-50: #70737C;
+      --atomic-coolNeutral-60: #878A93; --atomic-coolNeutral-70: #989BA2; --atomic-coolNeutral-80: #AEB0B6;
+      --atomic-coolNeutral-90: #C2C4C8; --atomic-coolNeutral-95: #DBDCDF; --atomic-coolNeutral-96: #E1E2E4;
+      --atomic-coolNeutral-97: #EAEBEC; --atomic-coolNeutral-98: #F4F4F5; --atomic-coolNeutral-99: #F7F7F8;
+
+      /* Blue — brand */
+      --atomic-blue-10:#001536; --atomic-blue-20:#002966; --atomic-blue-30:#003E9C; --atomic-blue-40:#0054D1;
+      --atomic-blue-45:#005EEB; --atomic-blue-50:#0066FF; --atomic-blue-55:#1A75FF; --atomic-blue-60:#3385FF;
+      --atomic-blue-65:#4F95FF; --atomic-blue-70:#69A5FF; --atomic-blue-80:#9EC5FF; --atomic-blue-90:#C9DEFE;
+      --atomic-blue-95:#EAF2FE; --atomic-blue-99:#F7FBFF;
+
+      /* Status atomics */
+      --atomic-red-10:#3B0101; --atomic-red-40:#E52222; --atomic-red-50:#FF4242; --atomic-red-60:#FF6363;
+      --atomic-red-90:#FED5D5; --atomic-red-95:#FEECEC;
+      --atomic-green-10:#00240C; --atomic-green-40:#009632; --atomic-green-50:#00BF40; --atomic-green-60:#1ED45A;
+      --atomic-green-90:#ACFCC7; --atomic-green-95:#D9FFE6;
+      --atomic-orange-10:#361E00; --atomic-orange-39:#D17600; --atomic-orange-50:#FF9200; --atomic-orange-60:#FFA938;
+      --atomic-orange-90:#FEE6C6; --atomic-orange-95:#FEF4E6;
+
+      /* Accent palette */
+      --atomic-redOrange-48:#F55A00; --atomic-redOrange-50:#FF5E00; --atomic-redOrange-60:#FF7B2E;
+      --atomic-lime-37:#429E00; --atomic-lime-50:#58CF04; --atomic-lime-60:#6BE016;
+      --atomic-cyan-40:#0098B2; --atomic-cyan-50:#00BDDE; --atomic-cyan-60:#28D0ED;
+      --atomic-lightBlue-40:#008DCF; --atomic-lightBlue-50:#00AEFF; --atomic-lightBlue-60:#3DC2FF;
+      --atomic-violet-45:#5B37ED; --atomic-violet-50:#6541F2; --atomic-violet-60:#7D5EF7; --atomic-violet-70:#9E86FC;
+      --atomic-purple-40:#AD36E3; --atomic-purple-50:#CB59FF; --atomic-purple-60:#D478FF;
+      --atomic-pink-46:#E846CD; --atomic-pink-50:#F553DA; --atomic-pink-60:#FA73E3;
+
+      /* Semantic — Light */
+      --semantic-static-white:#ffffff; --semantic-static-black:#000000;
+      --semantic-primary-normal:#0066FF; --semantic-primary-strong:#005EEB; --semantic-primary-heavy:#0054D1;
+      --semantic-label-normal:#171719; --semantic-label-strong:#000000;
+      --semantic-label-neutral:rgba(46,47,51,0.88); --semantic-label-alternative:rgba(55,56,60,0.61);
+      --semantic-label-assistive:rgba(55,56,60,0.28); --semantic-label-disable:rgba(55,56,60,0.16);
+      --semantic-background-normal-normal:#ffffff; --semantic-background-normal-alternative:#F7F7F8;
+      --semantic-background-elevated-normal:#ffffff; --semantic-background-elevated-alternative:#F7F7F8;
+      --semantic-background-transparent-normal:rgba(255,255,255,0.08);
+      --semantic-background-transparent-alternative:rgba(255,255,255,0.28);
+      --semantic-interaction-inactive:#989BA2; --semantic-interaction-disable:#F4F4F5;
+      --semantic-line-normal-normal:rgba(112,115,124,0.22);
+      --semantic-line-normal-neutral:rgba(112,115,124,0.16);
+      --semantic-line-normal-alternative:rgba(112,115,124,0.08);
+      --semantic-line-solid-normal:#E1E2E4; --semantic-line-solid-neutral:#EAEBEC; --semantic-line-solid-alternative:#F4F4F5;
+      --semantic-status-positive:#00BF40; --semantic-status-cautionary:#FF9200; --semantic-status-negative:#FF4242;
+      --semantic-accent-bg-redOrange:#FF5E00; --semantic-accent-bg-lime:#58CF04; --semantic-accent-bg-cyan:#00BDDE;
+      --semantic-accent-bg-lightBlue:#00AEFF; --semantic-accent-bg-violet:#6541F2;
+      --semantic-accent-bg-purple:#CB59FF; --semantic-accent-bg-pink:#F553DA;
+      --semantic-accent-fg-red:#E52222; --semantic-accent-fg-redOrange:#F55A00; --semantic-accent-fg-orange:#D17600;
+      --semantic-accent-fg-lime:#429E00; --semantic-accent-fg-green:#009632; --semantic-accent-fg-cyan:#0098B2;
+      --semantic-accent-fg-lightBlue:#008DCF; --semantic-accent-fg-blue:#005EEB; --semantic-accent-fg-violet:#5B37ED;
+      --semantic-accent-fg-purple:#AD36E3; --semantic-accent-fg-pink:#E846CD;
+      --semantic-inverse-primary:#3385FF; --semantic-inverse-background:#1B1C1E; --semantic-inverse-label:#F7F7F8;
+      --semantic-fill-normal:rgba(112,115,124,0.08); --semantic-fill-strong:rgba(112,115,124,0.16);
+      --semantic-fill-alternative:rgba(112,115,124,0.05);
+      --semantic-material-dimmer:rgba(23,23,25,0.52);
+
+      /* Shadows */
+      --shadow-xsmall:0px 1px 2px -1px rgba(23,23,23,0.10);
+      --shadow-small:0px 2px 4px -2px rgba(23,23,23,0.06), 0px 4px 6px -1px rgba(23,23,23,0.06);
+      --shadow-medium:0px 4px 6px -2px rgba(23,23,23,0.07), 0px 10px 15px -3px rgba(23,23,23,0.07);
+      --shadow-large:0px 6px 10px -4px rgba(23,23,23,0.08), 0px 16px 24px -6px rgba(23,23,23,0.08);
+      --shadow-xlarge:0px 10px 15px -5px rgba(23,23,23,0.10), 0px 24px 38px -10px rgba(23,23,23,0.12);
+      --shadow-spread-small:0px 0px 60px 0px rgba(23,23,23,0.10);
+      --shadow-spread-medium:0px 15px 75px 0px rgba(23,23,23,0.16);
+
+      /* Spacing */
+      --space-0:0px; --space-0-5:0.5px; --space-1:1px; --space-2:2px; --space-4:4px;
+      --space-6:6px; --space-8:8px; --space-10:10px; --space-12:12px; --space-14:14px;
+      --space-16:16px; --space-20:20px; --space-24:24px; --space-32:32px; --space-40:40px;
+      --space-48:48px; --space-56:56px; --space-64:64px; --space-72:72px; --space-80:80px;
+
+      /* Radii */
+      --radius-sm:8px; --radius-md:10px; --radius-lg:12px; --radius-xl:16px; --radius-2xl:20px; --radius-pill:9999px;
+
+      /* Type — Pretendard ramp + tracking */
+      --font-family-base:"Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+      --font-family-mono:"JetBrains Mono", "D2Coding", Menlo, Consolas, monospace;
+      --type-title1-size:2rem;       --type-title1-line:2.75rem;   --type-title1-tracking:-0.0253em;
+      --type-title3-size:1.5rem;     --type-title3-line:2rem;      --type-title3-tracking:-0.023em;
+      --type-heading1-size:1.375rem; --type-heading1-line:1.875rem;--type-heading1-tracking:-0.0194em;
+      --type-heading2-size:1.25rem;  --type-heading2-line:1.75rem; --type-heading2-tracking:-0.012em;
+      --type-headline1-size:1.125rem;--type-headline1-line:1.625rem;--type-headline1-tracking:-0.002em;
+      --type-headline2-size:1.0625rem;--type-headline2-line:1.5rem;--type-headline2-tracking:0em;
+      --type-body1-size:1rem;        --type-body1-line:1.5rem;     --type-body1-tracking:0.0057em;
+      --type-body2-size:0.9375rem;   --type-body2-line:1.375rem;   --type-body2-tracking:0.0096em;
+      --type-label1-size:0.875rem;   --type-label1-line:1.25rem;   --type-label1-tracking:0.0145em;
+      --type-label2-size:0.8125rem;  --type-label2-line:1.125rem;  --type-label2-tracking:0.0194em;
+      --type-caption1-size:0.75rem;  --type-caption1-line:1rem;    --type-caption1-tracking:0.0252em;
+      --type-caption2-size:0.6875rem;--type-caption2-line:0.875rem;--type-caption2-tracking:0.0311em;
+
+      /* Weights */
+      --weight-regular:400; --weight-medium:500; --weight-bold-display:700; --weight-bold-text:600;
+
+      /* ── 경건생활 4항목 액센트 매핑 (도메인 → atomic) — 이 4쌍만 바꾸면 전부 따라옴 ── */
+      --dev-read:        var(--atomic-green-50);   /* 말씀읽음 */
+      --dev-verse:       var(--atomic-blue-50);    /* 와닿은말씀 */
+      --dev-resolve:     var(--atomic-violet-50);  /* 결단 */
+      --dev-prayer:      var(--atomic-orange-50);  /* 수련회기도 */
+      --dev-read-fg:     var(--semantic-accent-fg-green);
+      --dev-verse-fg:    var(--semantic-accent-fg-blue);
+      --dev-resolve-fg:  var(--semantic-accent-fg-violet);
+      --dev-prayer-fg:   var(--semantic-accent-fg-orange);
+
+      /* ── Legacy 변수 alias (JSX inline style 호환용 — 절대 제거 금지) ── */
+      --primary:        var(--semantic-primary-normal);
+      --primary-strong: var(--semantic-primary-strong);
+      --bg:             var(--semantic-background-normal-normal);
+      --bg-alt:         var(--semantic-background-normal-alternative);
+      --label-normal:   var(--semantic-label-normal);
+      --label-alt:      var(--semantic-label-alternative);
+      --line-solid:     var(--semantic-line-solid-normal);
+      --fill-normal:    var(--semantic-fill-normal);
+      --status-positive:   var(--semantic-status-positive);
+      --status-cautionary: var(--semantic-status-cautionary);
+      --status-negative:   var(--semantic-status-negative);
+      --status-violet:     var(--atomic-violet-50);
+      --font-base:         var(--font-family-base);
+
+      /* 앱 셸 */
+      --app-max: 460px;
+      --appbar-h: 56px;
+    }
+
+    /* ── Dark theme — <html data-theme="dark"> ── */
+    [data-theme="dark"]{
+      --semantic-primary-normal:#3385FF; --semantic-primary-strong:#1A75FF; --semantic-primary-heavy:#0066FF;
+      --semantic-label-normal:#F7F7F8; --semantic-label-strong:#ffffff;
+      --semantic-label-neutral:rgba(194,196,200,0.88); --semantic-label-alternative:rgba(174,176,182,0.61);
+      --semantic-label-assistive:rgba(174,176,182,0.28); --semantic-label-disable:rgba(152,155,162,0.16);
+      --semantic-background-normal-normal:#1B1C1E; --semantic-background-normal-alternative:#0F0F10;
+      --semantic-background-elevated-normal:#212225; --semantic-background-elevated-alternative:#141415;
+      --semantic-interaction-inactive:#5A5C63; --semantic-interaction-disable:#2E2F33;
+      --semantic-line-normal-normal:rgba(112,115,124,0.32);
+      --semantic-line-normal-neutral:rgba(112,115,124,0.28);
+      --semantic-line-normal-alternative:rgba(112,115,124,0.22);
+      --semantic-line-solid-normal:#37383C; --semantic-line-solid-neutral:#333438; --semantic-line-solid-alternative:#2E2F33;
+      --semantic-status-positive:#1ED45A; --semantic-status-cautionary:#FFA938; --semantic-status-negative:#FF6363;
+      --semantic-fill-normal:rgba(112,115,124,0.22); --semantic-fill-strong:rgba(112,115,124,0.28);
+      --semantic-fill-alternative:rgba(112,115,124,0.12);
+      --semantic-material-dimmer:rgba(23,23,25,0.74);
+      --semantic-inverse-primary:#0066FF; --semantic-inverse-background:#ffffff; --semantic-inverse-label:#171719;
+    }
+
+    /* ====== RESET / BASE ====== */
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    html,body{margin:0;padding:0;height:100%}
+    body{
+      font-family:var(--font-family-base);
+      color:var(--semantic-label-normal);
+      background:var(--semantic-background-normal-alternative);
+      font-size:var(--type-body1-size);
+      line-height:var(--type-body1-line);
+      letter-spacing:var(--type-body1-tracking);
+      -webkit-font-smoothing:antialiased;
+      text-rendering:optimizeLegibility;
+    }
+    button{font-family:inherit;cursor:pointer;border:none;background:none;padding:0;color:inherit}
+    textarea{font-family:inherit}
+    #root{min-height:100dvh;display:flex;justify-content:center;background:var(--semantic-background-normal-alternative)}
+
+    /* ====== APP SHELL ====== */
+    .app{
+      width:100%;max-width:var(--app-max);min-height:100dvh;
+      background:var(--semantic-background-normal-normal);
+      display:flex;flex-direction:column;position:relative;
+      box-shadow:var(--shadow-spread-small);
+    }
+    @media(max-width:460px){.app{box-shadow:none;max-width:100%}}
+
+    /* ====== APPBAR ====== */
+    .appbar{
+      position:sticky;top:0;z-index:10;
+      background:color-mix(in srgb, var(--semantic-background-normal-normal) 88%, transparent);
+      backdrop-filter:saturate(180%) blur(32px);
+      -webkit-backdrop-filter:saturate(180%) blur(32px);
+      border-bottom:1px solid var(--semantic-line-solid-normal);
+      padding:env(safe-area-inset-top) 0 0;
+    }
+    .appbar-inner{height:var(--appbar-h);display:flex;align-items:center;padding:0 var(--space-16);gap:var(--space-8)}
+    .appbar-title{flex:1;display:flex;flex-direction:column;line-height:1.15;min-width:0}
+    .appbar-title .sub{
+      font-size:var(--type-caption2-size);line-height:var(--type-caption2-line);
+      letter-spacing:var(--type-caption2-tracking);
+      color:var(--semantic-label-alternative);font-weight:var(--weight-medium);
+    }
+    .appbar-title .main{
+      font-size:var(--type-headline2-size);line-height:1.25;
+      letter-spacing:var(--type-headline2-tracking);
+      font-weight:var(--weight-bold-text);
+      color:var(--semantic-label-normal);
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    }
+
+    /* ====== BUTTONS ====== */
+    .btn{
+      display:inline-flex;align-items:center;justify-content:center;
+      height:44px;padding:0 var(--space-16);
+      border-radius:var(--radius-lg);
+      font-size:var(--type-body2-size);letter-spacing:var(--type-body2-tracking);
+      font-weight:var(--weight-bold-text);
+      transition:background 150ms ease, box-shadow 150ms ease, color 150ms ease;
+    }
+    .btn.primary{background:var(--semantic-primary-normal);color:var(--semantic-static-white)}
+    .btn.primary:hover{background:var(--semantic-primary-strong)}
+    .btn.primary:active{background:var(--semantic-primary-heavy)}
+    .btn.primary:disabled{opacity:.5}
+    .btn.ghost{background:var(--semantic-fill-normal);color:var(--semantic-label-normal)}
+    .btn.ghost:hover{background:var(--semantic-fill-strong)}
+    .btn.block{width:100%}
+    .btn.sm{height:32px;padding:0 var(--space-12);font-size:var(--type-label2-size);letter-spacing:var(--type-label2-tracking);border-radius:var(--radius-sm)}
+
+    /* ====== LOGIN / 표지 ====== */
+    .login{
+      flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;
+      padding:var(--space-32) var(--space-24) var(--space-32);gap:var(--space-14);text-align:center;
+    }
+    .login h1{font-size:var(--type-heading1-size);line-height:var(--type-heading1-line);letter-spacing:var(--type-heading1-tracking);font-weight:var(--weight-bold-display);margin:0}
+    .login p{color:var(--semantic-label-alternative);margin:0}
+    /* ── 표지 cover (다크 히어로 + 크림 바디 + clay 버튼) ──
+       LoginScreen 전용. 다크모드와 무관하게 고정. 에러/권한 화면은 generic .login 유지. */
+    .cover{flex:1;display:flex;flex-direction:column;min-height:100dvh;background:#FAF9F5;color:#181715}
+
+    /* 다크 히어로 */
+    .cover-hero{
+      background:#181715;color:#FAF9F5;
+      padding:calc(env(safe-area-inset-top) + 44px) 28px 40px;
+    }
+    /* 안내 배너 — 다크 히어로 위에서도 항상 가독성 확보(고정색) */
+    .cover-hero .login-notice{margin:0 0 16px;background:#FFF3E0;color:#B45309}
+    .cover-hero .inapp-banner{margin:0 0 16px;background:#FFF3E0;border-color:#F3D6A8}
+    .cover-hero .inapp-title{color:#B45309}
+    .cover-hero .inapp-desc{color:#3D3D3D}
+    .cover-brand-text{font-size:14px;font-weight:500;color:#FAF9F5;letter-spacing:-0.01em;margin-bottom:22px}
+    .cover-title{
+      margin:0;color:#FAF9F5;word-break:keep-all;
+      font-family:'Noto Serif KR', serif;
+      font-size:clamp(28px, 8.4vw, 32px);line-height:1.18;font-weight:600;letter-spacing:-0.01em;
+    }
+    .cover-sub{margin:14px 0 0;color:#A09D96;word-break:keep-all;font-size:16px;line-height:1.5}
+
+    /* 크림 바디 */
+    .cover-body{flex:1;display:flex;flex-direction:column;padding:28px 24px calc(env(safe-area-inset-bottom) + 24px)}
+    .cover-features{display:flex;flex-direction:column;gap:18px}
+    .feat-row{display:flex;align-items:center;gap:14px}
+    .feat-icon{
+      flex-shrink:0;width:44px;height:44px;border-radius:12px;
+      display:inline-flex;align-items:center;justify-content:center;
+      background:#EFE9DE;color:#CC785C;
+    }
+    .feat-title{font-size:15px;font-weight:600;color:#181715;line-height:1.25}
+    .feat-sub{font-size:13px;color:#A09D96;margin-top:2px}
+
+    /* CTA — 클레이 버튼 + 그 위에 투명 GIS 버튼 오버레이(실제 로그인) */
+    .cover-cta-wrap{margin-top:auto;padding-top:28px;display:flex;flex-direction:column;gap:14px}
+    .cover-cta{position:relative;width:100%;height:54px}
+    .cta-clay{
+      position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:10px;
+      background:#CC785C;color:#fff;border-radius:14px;font-size:16px;font-weight:600;
+      pointer-events:none;box-shadow:0 6px 16px -6px rgba(204,120,92,0.5);
+    }
+    .cta-g{width:26px;height:26px;border-radius:50%;background:#fff;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+    .cta-gis{position:absolute;inset:0;z-index:2;opacity:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+    .cta-mock{position:relative;width:100%;height:54px;background:#181715;color:#fff;border-radius:14px;font-size:15px;font-weight:600}
+    .cover-foot{margin:0;font-size:13px;color:#A09D96;text-align:center;word-break:keep-all}
+
+    /* ====== TOAST ====== */
+    .toast{
+      position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+      background:var(--semantic-inverse-background);color:var(--semantic-inverse-label);
+      padding:var(--space-10) var(--space-16);border-radius:var(--radius-pill);
+      font-size:var(--type-body2-size);box-shadow:var(--shadow-large);
+      z-index:100;white-space:nowrap;
+    }
+
+    /* ====== TOP NAV ====== */
+    .topnav{
+      position:sticky;top:calc(env(safe-area-inset-top) + var(--appbar-h));z-index:9;
+      display:flex;
+      border-bottom:1px solid var(--semantic-line-solid-normal);
+      background:var(--semantic-background-normal-normal);
+      overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
+    }
+    .topnav::-webkit-scrollbar{display:none}
+    .topnav button{
+      flex:1 1 0;min-width:0;padding:var(--space-12) var(--space-4);
+      font-size:var(--type-caption1-size);letter-spacing:var(--type-caption2-tracking);
+      color:var(--semantic-label-alternative);white-space:nowrap;
+      overflow:hidden;text-overflow:ellipsis;
+      border-bottom:2px solid transparent;
+      transition:color 150ms ease, border-color 150ms ease;
+    }
+    .topnav button.active{color:var(--semantic-primary-normal);font-weight:var(--weight-bold-text);border-bottom-color:var(--semantic-primary-normal)}
+
+    /* ====== LOADING ====== */
+    .loading{flex:1;display:flex;align-items:center;justify-content:center;color:var(--semantic-label-alternative);padding:var(--space-40) 0}
+
+    /* ====== SCROLL BODY ====== */
+    .view{flex:1;padding-bottom:calc(env(safe-area-inset-bottom) + 40px)}
+
+    /* ====== SECTION HEAD ====== */
+    .section-head{
+      padding:var(--space-16) var(--space-16) var(--space-6);
+      font-size:var(--type-caption1-size);letter-spacing:0.04em;text-transform:uppercase;
+      font-weight:var(--weight-bold-text);color:var(--semantic-label-alternative);
+    }
+
+    /* ====== ICON BTN (다크모드 토글) ====== */
+    .icon-btn{
+      width:36px;height:36px;border-radius:var(--radius-md);
+      display:inline-flex;align-items:center;justify-content:center;
+      color:var(--semantic-label-alternative);flex-shrink:0;
+      transition:background 150ms ease, color 150ms ease;
+    }
+    .icon-btn:hover{background:var(--semantic-fill-normal);color:var(--semantic-label-normal)}
+
+    /* ====== SHEET / MODAL ====== */
+    .sheet-overlay{position:fixed;inset:0;background:var(--semantic-material-dimmer);display:flex;align-items:flex-end;z-index:50}
+    .sheet{
+      background:var(--semantic-background-elevated-normal);width:100%;max-width:var(--app-max);margin:0 auto;
+      border-top-left-radius:var(--radius-2xl);border-top-right-radius:var(--radius-2xl);
+      max-height:92vh;display:flex;flex-direction:column;overflow:hidden;
+      box-shadow:var(--shadow-xlarge);
+    }
+    .sheet-handle{width:36px;height:4px;border-radius:var(--radius-pill);background:var(--semantic-line-solid-normal);margin:var(--space-10) auto var(--space-6)}
+    .sheet-header{padding:var(--space-4) var(--space-20) var(--space-10);display:flex;align-items:center;justify-content:space-between;gap:var(--space-12)}
+    .sheet-header h3{font-size:var(--type-headline1-size);line-height:var(--type-headline1-line);letter-spacing:var(--type-headline1-tracking);font-weight:var(--weight-bold-text);margin:0}
+    .sheet-title{min-width:0;display:flex;flex-direction:column;gap:2px}
+    .sheet-sub{font-size:var(--type-caption1-size);color:var(--semantic-label-alternative);word-break:break-all}
+    .sheet-close{width:36px;height:36px;border-radius:var(--radius-md);display:inline-flex;align-items:center;justify-content:center;color:var(--semantic-label-alternative)}
+    .sheet-close:hover{background:var(--semantic-fill-normal)}
+    .sheet-body{padding:0 var(--space-20) var(--space-20);overflow-y:auto;flex:1}
+
+    /* ====== FORM ====== */
+    .form-row{margin:0 var(--space-16) var(--space-14)}
+    .form-label{font-size:var(--type-label2-size);letter-spacing:var(--type-label2-tracking);font-weight:var(--weight-bold-text);color:var(--semantic-label-alternative);margin-bottom:var(--space-6);display:flex;align-items:center;gap:var(--space-6)}
+    .form-input,.form-textarea{
+      width:100%;padding:var(--space-12);
+      border:1.5px solid var(--semantic-line-solid-normal);border-radius:var(--radius-md);
+      font:inherit;font-size:var(--type-body2-size);color:var(--semantic-label-normal);
+      background:var(--semantic-background-normal-normal);
+      transition:border-color 150ms ease;outline:none;resize:vertical;
+    }
+    .form-textarea{min-height:76px;line-height:1.5}
+    .form-input:focus,.form-textarea:focus{border-color:var(--semantic-primary-normal);box-shadow:0 0 0 3px color-mix(in srgb, var(--semantic-primary-normal) 12%, transparent)}
+    .form-textarea.verse:focus{border-color:var(--dev-verse);box-shadow:0 0 0 3px color-mix(in srgb, var(--dev-verse) 12%, transparent)}
+    .form-textarea.resolve:focus{border-color:var(--dev-resolve);box-shadow:0 0 0 3px color-mix(in srgb, var(--dev-resolve) 12%, transparent)}
+
+    /* ====== DATE TOGGLE (오늘/어제) ====== */
+    .date-toggle{display:flex;gap:6px;padding:12px 16px 4px}
+    .date-toggle button{
+      flex:1;min-height:44px;border:1px solid var(--semantic-line-solid-normal);
+      background:var(--semantic-background-normal-normal);border-radius:var(--radius-pill);
+      font-size:var(--type-body2-size);font-weight:var(--weight-bold-text);
+      color:var(--semantic-label-alternative);
+      transition:background 150ms ease, color 150ms ease, border-color 150ms ease;
+    }
+    .date-toggle button.active{background:var(--semantic-primary-normal);border-color:transparent;color:#fff}
+    .date-caption{padding:2px 16px 8px;font-size:var(--type-label2-size);color:var(--semantic-label-alternative)}
+
+    /* ====== READING CARDS (맥체인 본문) ====== */
+    .reading-group{padding:4px 16px}
+    .reading-group-head{font-size:var(--type-caption1-size);font-weight:var(--weight-bold-text);color:var(--semantic-label-alternative);letter-spacing:0.03em;margin:8px 0 6px}
+    .reading-card{
+      display:flex;align-items:center;gap:12px;
+      padding:12px 14px;margin-bottom:8px;
+      border:1px solid var(--semantic-line-solid-normal);border-radius:var(--radius-lg);
+      background:color-mix(in srgb, var(--dev-read) 4%, var(--semantic-background-normal-normal));
+    }
+    .reading-card .rc-dot{width:10px;height:10px;border-radius:50%;background:var(--dev-read);flex-shrink:0}
+    .reading-card .rc-text{font-weight:var(--weight-bold-text);color:var(--semantic-label-normal)}
+    .reading-card.secret{background:color-mix(in srgb, var(--dev-verse) 4%, var(--semantic-background-normal-normal))}
+    .reading-card.secret .rc-dot{background:var(--dev-verse)}
+    .reading-missing{margin:8px 16px;padding:12px 14px;border-radius:var(--radius-lg);background:var(--semantic-fill-normal);color:var(--semantic-label-alternative);font-size:var(--type-label2-size);line-height:1.5}
+
+    /* ====== CHECK PILL (말씀읽음 / 수련회기도 토글) ====== */
+    .check-pill{
+      display:inline-flex;align-items:center;gap:var(--space-6);
+      min-height:44px;
+      padding:var(--space-8) var(--space-16);border-radius:var(--radius-pill);
+      font-size:var(--type-body2-size);font-weight:var(--weight-bold-text);
+      border:1.5px solid var(--semantic-line-solid-normal);
+      background:var(--semantic-background-normal-normal);
+      color:var(--semantic-label-neutral);cursor:pointer;
+      transition:background 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+    }
+    .check-pill .check-icon{font-size:15px}
+    .check-pill.read.checked{background:color-mix(in srgb, var(--dev-read) 14%, transparent);border-color:var(--dev-read);color:var(--dev-read-fg);box-shadow:0 0 0 1px color-mix(in srgb, var(--dev-read) 18%, transparent)}
+    .check-pill.prayer.checked{background:color-mix(in srgb, var(--dev-prayer) 14%, transparent);border-color:var(--dev-prayer);color:var(--dev-prayer-fg);box-shadow:0 0 0 1px color-mix(in srgb, var(--dev-prayer) 18%, transparent)}
+    .check-pill.part.checked{background:color-mix(in srgb, var(--semantic-primary-normal) 12%, transparent);border-color:var(--semantic-primary-normal);color:var(--semantic-primary-normal);box-shadow:0 0 0 1px color-mix(in srgb, var(--semantic-primary-normal) 18%, transparent)}
+
+    /* ====== REGISTER (자가 등록) ====== */
+    .register{flex:1;display:flex;flex-direction:column;padding:var(--space-32) var(--space-20) calc(env(safe-area-inset-bottom) + var(--space-24))}
+    .register-hero{text-align:center;margin-bottom:var(--space-20)}
+    .register-hero h1{font-size:var(--type-heading1-size);line-height:var(--type-heading1-line);letter-spacing:var(--type-heading1-tracking);font-weight:var(--weight-bold-display);margin:0}
+    .register-sub{color:var(--semantic-label-alternative);margin:var(--space-6) 0 0;font-size:var(--type-body2-size)}
+    .register-account{display:inline-flex;flex-direction:column;gap:2px;align-items:center;margin-top:var(--space-14);padding:var(--space-8) var(--space-16);border-radius:var(--radius-lg);background:var(--semantic-fill-normal);max-width:100%}
+    .register-account .ra-label{font-size:var(--type-caption1-size);color:var(--semantic-label-alternative);font-weight:var(--weight-bold-text);letter-spacing:0.03em}
+    .register-account .ra-email{font-size:var(--type-body2-size);color:var(--semantic-label-normal);font-weight:var(--weight-bold-text);word-break:break-all}
+    .register-error{margin:0 var(--space-16) var(--space-14);padding:var(--space-10) var(--space-14);border-radius:var(--radius-md);background:color-mix(in srgb, var(--semantic-status-negative) 12%, transparent);color:var(--semantic-status-negative);font-size:var(--type-label2-size);line-height:1.5}
+    .register .form-label .req{color:var(--semantic-status-negative)}
+    .register .form-label .opt{color:var(--semantic-label-alternative);font-weight:var(--weight-medium)}
+    .part-pills{display:flex;flex-wrap:wrap;gap:var(--space-8);margin-bottom:var(--space-8)}
+    .part-pills .check-pill{min-height:40px}
+    .form-hint{margin:var(--space-6) 0 0;font-size:var(--type-label2-size);color:var(--semantic-label-alternative);line-height:1.5}
+    .register-alt{margin:var(--space-4) var(--space-16) 0}
+    @keyframes chip-pop{0%{transform:scale(1)}40%{transform:scale(1.08)}100%{transform:scale(1)}}
+    .check-pill.checked{animation:chip-pop .25s ease}
+    @media (prefers-reduced-motion: reduce){.check-pill.checked{animation:none}}
+
+    /* ====== STREAK / STAT CARDS ====== */
+    .streak-card{
+      margin:12px 16px;padding:18px 16px;border-radius:var(--radius-xl);
+      background:color-mix(in srgb, var(--dev-read) 8%, var(--semantic-background-normal-normal));
+      border:1px solid color-mix(in srgb, var(--dev-read) 22%, transparent);
+      display:flex;align-items:center;gap:16px;
+    }
+    .streak-flame{font-size:38px;line-height:1;flex-shrink:0}
+    .streak-num{font-size:34px;line-height:1;font-weight:var(--weight-bold-display);color:var(--dev-read-fg)}
+    .streak-label{font-size:var(--type-label2-size);color:var(--semantic-label-alternative);margin-top:2px}
+
+    .rate-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 16px}
+    .rate-card{
+      padding:14px;border-radius:var(--radius-lg);
+      border:1px solid var(--semantic-line-solid-normal);
+      background:var(--semantic-background-normal-normal);
+    }
+    .rate-title{font-size:var(--type-caption1-size);text-transform:uppercase;letter-spacing:0.03em;color:var(--semantic-label-alternative);font-weight:var(--weight-bold-text)}
+    .rate-pct{font-size:26px;font-weight:var(--weight-bold-display);color:var(--semantic-primary-normal);line-height:1.2;margin:4px 0 2px}
+    .rate-meta{font-size:var(--type-caption1-size);color:var(--semantic-label-alternative)}
+    .rate-track{height:6px;border-radius:3px;background:var(--semantic-fill-normal);overflow:hidden;margin-top:8px}
+    .rate-fill{height:100%;background:var(--semantic-primary-normal);border-radius:3px;transition:width 240ms ease}
+
+    .prayer-counter{
+      margin:8px 16px;padding:14px 16px;border-radius:var(--radius-lg);
+      border:1px solid color-mix(in srgb, var(--dev-prayer) 22%, transparent);
+      background:color-mix(in srgb, var(--dev-prayer) 6%, var(--semantic-background-normal-normal));
+      display:flex;align-items:center;gap:12px;
+    }
+    .prayer-counter .pc-num{font-size:24px;font-weight:var(--weight-bold-display);color:var(--dev-prayer-fg)}
+    .prayer-counter .pc-label{font-size:var(--type-label2-size);color:var(--semantic-label-normal)}
+
+    /* ====== ENCOURAGE BANNER ====== */
+    .encourage{
+      margin:12px 16px;padding:14px 16px;border-radius:var(--radius-xl);
+      background:color-mix(in srgb, var(--enc-color) 12%, var(--semantic-background-normal-normal));
+      border:1px solid color-mix(in srgb, var(--enc-color) 30%, transparent);
+      display:flex;gap:12px;align-items:flex-start;
+    }
+    .encourage .enc-icon{font-size:20px;line-height:1.3;flex-shrink:0}
+    .encourage .enc-text{font-size:var(--type-body2-size);font-weight:var(--weight-medium);color:var(--semantic-label-normal);line-height:1.5}
+
+    /* ====== RECORD CARD (최근 기록 리스트) ====== */
+    .record-card{
+      margin:8px 16px;padding:12px 14px;border-radius:var(--radius-lg);
+      border:1px solid var(--semantic-line-solid-normal);
+      background:var(--semantic-background-normal-normal);
+      display:flex;align-items:center;gap:12px;text-align:left;width:calc(100% - 32px);
+      transition:border-color 150ms ease, background 150ms ease;
+    }
+    .record-card:hover{background:var(--semantic-fill-alternative)}
+    .record-date{font-weight:var(--weight-bold-text);color:var(--semantic-label-normal);min-width:96px}
+    .record-rel{font-size:var(--type-caption1-size);color:var(--semantic-label-alternative);margin-top:1px}
+    .record-badges{margin-left:auto;display:flex;gap:5px}
+    .rbadge{width:26px;height:26px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:var(--semantic-fill-normal);color:var(--semantic-label-assistive)}
+    .rbadge.on.read{background:color-mix(in srgb, var(--dev-read) 16%, transparent);color:var(--dev-read-fg)}
+    .rbadge.on.verse{background:color-mix(in srgb, var(--dev-verse) 16%, transparent);color:var(--dev-verse-fg)}
+    .rbadge.on.resolve{background:color-mix(in srgb, var(--dev-resolve) 16%, transparent);color:var(--dev-resolve-fg)}
+    .rbadge.on.prayer{background:color-mix(in srgb, var(--dev-prayer) 16%, transparent);color:var(--dev-prayer-fg)}
+    .empty-note{margin:24px 16px;text-align:center;color:var(--semantic-label-alternative);font-size:var(--type-body2-size)}
+
+    /* ====== SHEET DETAIL (기록 상세) ====== */
+    .detail-field{margin-bottom:16px}
+    .detail-field .df-label{display:flex;align-items:center;gap:6px;font-size:var(--type-label2-size);font-weight:var(--weight-bold-text);color:var(--semantic-label-alternative);margin-bottom:4px}
+    .detail-field .df-dot{width:9px;height:9px;border-radius:50%}
+    .detail-field .df-value{font-size:var(--type-body2-size);color:var(--semantic-label-normal);white-space:pre-wrap;line-height:1.55}
+    .detail-field .df-value.muted{color:var(--semantic-label-assistive)}
+
+    /* ====== TEAM GRID (우리팀) ====== */
+    .team-card{
+      margin:8px 16px;padding:12px 14px;border-radius:var(--radius-lg);
+      border:1px solid var(--semantic-line-solid-normal);
+      background:var(--semantic-background-normal-normal);text-align:left;width:calc(100% - 32px);
+    }
+    .team-card:hover{background:var(--semantic-fill-alternative)}
+    .team-top{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}
+    .team-name{font-weight:var(--weight-bold-text);color:var(--semantic-label-normal);font-size:var(--type-body2-size)}
+    .team-stat{margin-left:auto;font-size:var(--type-caption1-size);color:var(--semantic-label-alternative)}
+    .team-stat b{color:var(--dev-read-fg);font-weight:var(--weight-bold-display)}
+    .team-week{display:flex;gap:5px}
+    .day-cell{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0}
+    .day-dow{font-size:10px;color:var(--semantic-label-assistive)}
+    .day-mark{width:100%;max-width:30px;aspect-ratio:1;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;background:var(--semantic-fill-normal);color:var(--semantic-label-assistive)}
+    .day-mark.on{background:color-mix(in srgb, var(--dev-read) 16%, transparent);color:var(--dev-read-fg)}
+    .day-mark.today{outline:2px solid color-mix(in srgb, var(--semantic-primary-normal) 40%, transparent);outline-offset:1px}
+
+    /* ====== NOTICES ====== */
+    .login-notice{
+      padding:var(--space-8) var(--space-14);border-radius:var(--radius-md);
+      background:color-mix(in srgb, var(--semantic-status-cautionary) 10%, transparent);
+      color:var(--semantic-accent-fg-orange);
+      font-size:var(--type-label2-size);font-weight:var(--weight-bold-text);
+    }
+    .inapp-banner{
+      margin:0;padding:var(--space-12) var(--space-14);border-radius:var(--radius-lg);
+      background:color-mix(in srgb, var(--semantic-status-cautionary) 14%, var(--semantic-background-normal-normal));
+      border:1px solid color-mix(in srgb, var(--semantic-status-cautionary) 40%, transparent);
+    }
+    .inapp-title{font-size:var(--type-label1-size);font-weight:var(--weight-bold-text);color:var(--semantic-accent-fg-orange);margin-bottom:var(--space-4)}
+    .inapp-desc{font-size:var(--type-caption1-size);color:var(--semantic-label-normal);line-height:1.5;margin-bottom:var(--space-10)}
+    .inapp-actions{display:flex;gap:var(--space-8);flex-wrap:wrap}
+
+    /* ── 라이트 전용 오버라이드: 밝고 따뜻한 크림/코랄 테마 (다크와 무관) ──
+       다크 모드는 <html data-theme="dark">이므로 :root:not([data-theme="dark"])로
+       라이트에서만 적용. 기존 토큰 정의는 건드리지 않고 캐스케이드로 덮는다. */
+    :root:not([data-theme="dark"]){
+      --bg:#FFF9F2;                          /* 따뜻한 크림 화이트 */
+      --semantic-primary-normal:#FF6B4A;     /* 코랄 포인트 */
+      --semantic-primary-strong:#F25533;     /* hover */
+      --semantic-primary-heavy:#DD4424;      /* active */
+      --radius-lg:16px; --radius-xl:20px; --radius-2xl:24px;
+    }
+    :root:not([data-theme="dark"]) .app{background:#FFF9F2}
+    :root:not([data-theme="dark"]) #root{background:#FFF3EA}
+    :root:not([data-theme="dark"]) .appbar{
+      background:linear-gradient(135deg,#FFB45A 0%,#FF6B4A 100%);
+      border-bottom-color:transparent;
+    }
+    :root:not([data-theme="dark"]) .appbar .appbar-title .sub{color:rgba(255,255,255,.85)}
+    :root:not([data-theme="dark"]) .appbar .appbar-title .main{color:#fff}
+    :root:not([data-theme="dark"]) .appbar .icon-btn,
+    :root:not([data-theme="dark"]) .appbar .btn.ghost{color:#fff;border:1px solid rgba(255,255,255,.4)}
+    :root:not([data-theme="dark"]) .reading-card,
+    :root:not([data-theme="dark"]) .rate-card,
+    :root:not([data-theme="dark"]) .record-card,
+    :root:not([data-theme="dark"]) .team-card{box-shadow:0 2px 10px rgba(255,107,74,.06)}
+  
