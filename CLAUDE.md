@@ -36,8 +36,8 @@
 
 - **검증(전체)**: `npm test`
 - 프론트 정적 검사: `node scripts/check-web.mjs`
-- GAS 로직 단위 테스트(모의 SpreadsheetApp): `node scripts/test-gas-actions.mjs`
-- 지표·독려 메시지 단위 테스트: `node scripts/test-stats.mjs`
+- GAS 로직 단위 테스트(모의 SpreadsheetApp) + 보안 회귀 테스트: `node scripts/test-gas-actions.mjs`
+- 지표 단위 테스트(계약 §3 정의): `node scripts/test-stats.mjs`
 - 참고자료 JSON 검증: `node scripts/test-library-data.mjs`
 - 맥체인 데이터 검증: `node scripts/test-mccheyne.mjs`
 - 참고자료 재수집: `node scripts/fetch-library.mjs`
@@ -47,8 +47,13 @@
 
 ### 작업 범위 (하네스)
 
-- **이 저장소(`D:\00 workspace\01_Project\학부모 경건생활 앱`) 밖의 파일을 수정하지 않는다.**
-  참고 저장소(scratchpad의 `godly-ref`)는 **읽기 전용**이다.
+- **이 저장소 밖의 파일을 수정하지 않는다.**
+  - GitHub 저장소명: `godly-life-family`
+  - 로컬 경로: `D:\00 workspace\01_Project\학부모 경건생활 앱`
+    (공백·한글 포함 — 스크립트에서 경로를 조합할 때 **반드시 인용**할 것)
+- 참고 저장소 `kyuils/godly-life-check`는 **읽기 전용**이다. 필요하면 임시 폴더에 새로 클론해서 읽는다:
+  `git clone --depth 1 https://github.com/kyuils/godly-life-check.git`
+  (이전 세션에서 클론한 임시 경로는 재현되지 않으므로 의존하지 않는다)
 - **요구사항 고정**: 위 "핵심 기능" 9개 목록에 없는 기능을 임의로 추가·삭제하지 않는다.
   변경이 필요하면 총괄 에이전트에게 **보고만** 한다.
 - **API 계약 고정**: `docs/specs/2026-07-30-api-contract.md`의 스키마·액션 계약을 임의로 바꾸지 않는다.
@@ -59,16 +64,33 @@
 
 - `npm test`가 통과하고, 위 요구사항 9개 목록과 **항목별로 대조 확인**한 뒤에만 완료를 선언한다.
 - 검증 명령을 실행하지 않은 채로 "동작한다"고 주장하지 않는다.
+- **`scripts/test-gas-actions.mjs`는 아래 보안 불변식 1~6 각각에 대해 명시적 회귀 테스트를 포함해야 한다.**
+  이 6개 테스트가 없으면 완료를 선언하지 않는다:
+  1. 클라이언트가 보낸 `email`/`role`/`kind`가 기록·권한 판정에 반영되지 않음
+  2. 교사 전용 액션이 student/parent 토큰에 `forbidden`
+  3. `register(kind:'teacher')` → `bad_request`이고 `MEMBERS_교사` 행 수가 변하지 않음
+  4. 타인 소유 기도 id·존재하지 않는 id·삭제된 id가 **모두 동일하게** `forbidden`
+  5. `=SUM(A1)` 입력이 `'`로 접두되어 저장됨
+  6. 오류 응답 본문에 시트 ID·파일 경로·스택 문자열이 없음
+- 프론트 캐시 격리(계약 §6.1)는 `scripts/check-web.mjs`의 정적 검사로 확인한다.
 
 ### 보안 불변식 (절대 위반 금지)
 
-1. 서버는 **검증된 ID 토큰의 email만** 신뢰한다. 클라이언트가 보낸 `email`·`role`·`구분`은 **무시**한다.
+1. 서버는 **검증된 ID 토큰의 email만** 신뢰한다.
+   **권한에 영향을 주는 값(role·교사 여부·active)은 어떤 경우에도 클라이언트 입력을 반영하지 않는다.**
+   `register`의 `kind`(`student`|`parent`)는 권한을 부여하지 않는 자기신고 값이며, 그 외 모든 액션에서
+   클라이언트가 보낸 `email`·`name`·`kind`·`role`은 **무시**한다.
 2. 조회 액션은 반드시 토큰 email로 행을 필터한다. 교사 전용 액션은 `isTeacher_` 통과를 먼저 확인한다.
 3. **교사·관리자 권한은 `MEMBERS_교사` 시트를 사람이 직접 편집해야만 부여된다.**
    `register` 액션은 어떤 입력으로도 교사 권한을 만들 수 없다.
 4. 기도제목(`PRAYERS`)은 본인 + 교사만 조회 가능하다. 다른 학생·학부모에게 노출되는 경로를 만들지 않는다.
 5. 시트에 쓰는 모든 자유 텍스트에 `sanitizeCell_`(수식 인젝션 방어)를 적용한다.
 6. 오류 응답에 스택 트레이스·시트 ID·내부 경로를 담지 않는다.
+7. **프론트 캐시는 email로 스코핑하고 메모리에만 둔다.** 로그아웃·계정 전환 시 캐시와 state를 전부 파기한다.
+   (한 휴대폰을 가족이 공유하는 것이 이 앱의 기본 시나리오다 — 계약 §6.1)
+8. **배포는 "나(소유자)로 실행 / 모든 사용자 접근"이며, 스프레드시트는 누구에게도 공유하지 않는다.**
+   (계약 §8.1 — 요구사항 8을 성립시키는 설정 자체다)
+9. **`RECORDS_*`·`PRAYERS` 시트는 사람이 편집하지 않는다.** 쓰기는 read-verify-write로 보호한다. (계약 §2.0)
 
 ### 비밀값
 
