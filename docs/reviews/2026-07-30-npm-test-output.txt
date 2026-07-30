@@ -212,7 +212,7 @@ ALL TESTS PASSED
   [PASS] network_error 문구가 인터넷과 배포 설정을 함께 안내한다
 
 --- busy 재시도 (저녁 몰림 대비) ---
-(node:15156) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/00%20workspace/01_Project/%ED%95%99%EB%B6%80%EB%AA%A8%20%EA%B2%BD%EA%B1%B4%EC%83%9D%ED%99%9C%20%EC%95%B1/web/js/api.js is not specified and it doesn't parse as CommonJS.
+(node:38600) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/00%20workspace/01_Project/%ED%95%99%EB%B6%80%EB%AA%A8%20%EA%B2%BD%EA%B1%B4%EC%83%9D%ED%99%9C%20%EC%95%B1/web/js/api.js is not specified and it doesn't parse as CommonJS.
 Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
 To eliminate this warning, add "type": "module" to D:\00 workspace\01_Project\학부모 경건생활 앱\package.json.
 (Use `node --trace-warnings ...` to show where the warning was created)
@@ -246,20 +246,24 @@ ALL TESTS PASSED
   [PASS] 오늘 draft는 restoreDraftContext 후에도 살아 있다
   [PASS] restoreDraftContext는 draft가 없을 때 안전하다
 
+--- ★ 화면이 바뀌어도 데이터는 갱신된다 ---
+  [PASS] ★ 저장 중 탭이 바뀌어도 state.records에 그날 기록이 반영된다
+  [PASS] ★ 세션이 파기된 뒤 도착한 응답은 state를 되살리지 않는다
+
 --- 저장 시각 표기 ---
   [PASS] formatKo가 사람이 읽는 날짜를 만든다
 
 === 결과 ===
-PASS: 11, FAIL: 0
+PASS: 13, FAIL: 0
 ALL TESTS PASSED
-(node:12468) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/00%20workspace/01_Project/%ED%95%99%EB%B6%80%EB%AA%A8%20%EA%B2%BD%EA%B1%B4%EC%83%9D%ED%99%9C%20%EC%95%B1/web/js/state.js is not specified and it doesn't parse as CommonJS.
+(node:39260) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/00%20workspace/01_Project/%ED%95%99%EB%B6%80%EB%AA%A8%20%EA%B2%BD%EA%B1%B4%EC%83%9D%ED%99%9C%20%EC%95%B1/web/js/state.js is not specified and it doesn't parse as CommonJS.
 Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
 To eliminate this warning, add "type": "module" to D:\00 workspace\01_Project\학부모 경건생활 앱\package.json.
 (Use `node --trace-warnings ...` to show where the warning was created)
 === 달력 월 이동 상태 전이 테스트 ===
 
   [PASS] 초기 화면은 이번 달과 심어 둔 기록 3건을 보여준다
-(node:33372) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/00%20workspace/01_Project/%ED%95%99%EB%B6%80%EB%AA%A8%20%EA%B2%BD%EA%B1%B4%EC%83%9D%ED%99%9C%20%EC%95%B1/web/js/state.js is not specified and it doesn't parse as CommonJS.
+(node:39308) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/00%20workspace/01_Project/%ED%95%99%EB%B6%80%EB%AA%A8%20%EA%B2%BD%EA%B1%B4%EC%83%9D%ED%99%9C%20%EC%95%B1/web/js/state.js is not specified and it doesn't parse as CommonJS.
 Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
 To eliminate this warning, add "type": "module" to D:\00 workspace\01_Project\학부모 경건생활 앱\package.json.
 (Use `node --trace-warnings ...` to show where the warning was created)
@@ -272,7 +276,7 @@ To eliminate this warning, add "type": "module" to D:\00 workspace\01_Project\�
 === 결과 ===
 PASS: 6, FAIL: 0
 ALL TESTS PASSED
-(node:26100) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/00%20workspace/01_Project/%ED%95%99%EB%B6%80%EB%AA%A8%20%EA%B2%BD%EA%B1%B4%EC%83%9D%ED%99%9C%20%EC%95%B1/web/js/stats.js is not specified and it doesn't parse as CommonJS.
+(node:39668) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///D:/00%20workspace/01_Project/%ED%95%99%EB%B6%80%EB%AA%A8%20%EA%B2%BD%EA%B1%B4%EC%83%9D%ED%99%9C%20%EC%95%B1/web/js/stats.js is not specified and it doesn't parse as CommonJS.
 Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
 To eliminate this warning, add "type": "module" to D:\00 workspace\01_Project\학부모 경건생활 앱\package.json.
 (Use `node --trace-warnings ...` to show where the warning was created)

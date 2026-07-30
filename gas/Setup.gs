@@ -25,6 +25,17 @@ const SETUP_REGISTER_CODE = 'PASTE_REGISTER_CODE_HERE';
 
 function setupAll() {
   setupProperties_();
+
+  // ★ 시트 ID가 placeholder면 여기서 멈춘다.
+  // 그대로 진행하면 setupTabs_의 openById가 «잘못된 인수» 빨간 예외를 던지고,
+  // 비개발자는 무엇이 문제인지 알 수 없다. 코드로 막을 수 있는 고장이다 (6차 검토 ⑦).
+  const sheetId = String(SETUP_SHEET_ID || '').trim();
+  if (!sheetId || sheetId === 'PASTE_SHEET_ID_HERE') {
+    Logger.log('중단: SETUP_SHEET_ID를 채우고 다시 실행하세요. ' +
+      '(설치문서 02번에서 스프레드시트 주소의 /d/ 와 /edit 사이 문자열을 복사)');
+    return;
+  }
+
   setupTabs_();
   protectDataSheets();
   Logger.log('SETUP COMPLETE — 명부 3개 탭, PRAYERS 탭, Script Properties가 준비되었습니다.');
@@ -33,8 +44,10 @@ function setupAll() {
 function setupProperties_() {
   const props = PropertiesService.getScriptProperties();
 
-  if (SETUP_SHEET_ID && SETUP_SHEET_ID !== 'PASTE_SHEET_ID_HERE') {
-    props.setProperty('SHEET_ID', SETUP_SHEET_ID);
+  // 붙여넣기에 딸려 오는 앞뒤 공백을 제거한다 (클라이언트 ID와 같은 이유).
+  const sheetId = String(SETUP_SHEET_ID || '').trim();
+  if (sheetId && sheetId !== 'PASTE_SHEET_ID_HERE') {
+    props.setProperty('SHEET_ID', sheetId);
     Logger.log('Script Properties: SHEET_ID 설정 완료');
   } else {
     Logger.log('!! SHEET_ID가 placeholder입니다 — SETUP_SHEET_ID를 채우고 다시 실행하세요.');
@@ -71,7 +84,7 @@ function setupProperties_() {
 }
 
 function setupTabs_() {
-  const ss = SpreadsheetApp.openById(SETUP_SHEET_ID);
+  const ss = SpreadsheetApp.openById(String(SETUP_SHEET_ID).trim());
 
   ensureTab_(ss, SHEET_NAMES.MEMBERS_STUDENT, HEADERS.MEMBERS_STUDENT);
   ensureTab_(ss, SHEET_NAMES.MEMBERS_PARENT, HEADERS.MEMBERS_PARENT);
@@ -88,7 +101,8 @@ function setupTabs_() {
 
   // 새로 만든 경우에만 최초 관리자 등록
   if (teacherCreated && SETUP_ADMIN_EMAIL && SETUP_ADMIN_EMAIL !== 'PASTE_ADMIN_EMAIL_HERE') {
-    teachers.appendRow([String(SETUP_ADMIN_EMAIL).toLowerCase().trim(), SETUP_ADMIN_NAME, 'admin', 'TRUE', todayStr_()]);
+    teachers.appendRow([String(SETUP_ADMIN_EMAIL).toLowerCase().trim(),
+      String(SETUP_ADMIN_NAME).trim(), 'admin', 'TRUE', todayStr_()]);
     Logger.log('MEMBERS_교사: 최초 관리자 등록 — ' + SETUP_ADMIN_EMAIL);
   }
 
@@ -109,7 +123,7 @@ function setupTabs_() {
  * 멱등하다 — 이미 보호된 시트는 건너뛴다.
  */
 function protectDataSheets() {
-  const ss = SpreadsheetApp.openById(SETUP_SHEET_ID);
+  const ss = SpreadsheetApp.openById(String(SETUP_SHEET_ID).trim());
   const sheets = ss.getSheets();
   let done = 0;
   for (let i = 0; i < sheets.length; i++) {

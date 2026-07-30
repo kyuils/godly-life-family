@@ -14,6 +14,7 @@ let subTab = 'records';
 
 export async function render(root) {
   const gen = bumpGeneration();
+  const owner = api.getSessionEmail();
   if (state.classRecords === null) {
     root.innerHTML = '<div class="loading">불러오는 중...</div>';
     const [rec, pray, mem] = await Promise.all([
@@ -21,16 +22,20 @@ export async function render(root) {
       api.call('getAllPrayers', { days: 180 }),
       api.call('getMembers', {}),
     ]);
-    if (stale(gen)) return;            // 불러오는 사이 다른 탭으로 이동했다
     if (!rec.ok || !pray.ok || !mem.ok) {
       const bad = [rec, pray, mem].find(function (r) { return !r.ok; });
-      root.innerHTML = '<div class="empty-note">' + escapeHtml(api.errorMessage(bad.code)) + '</div>';
+      if (!stale(gen)) {
+        root.innerHTML = '<div class="empty-note">' + escapeHtml(api.errorMessage(bad.code)) + '</div>';
+      }
       return;
     }
+    // 받아 온 데이터는 버리지 않는다. 단 같은 사람일 때만 쓴다 (6차 검토 ②·④).
+    if (api.getSessionEmail() !== owner) return;
     state.classRecords = rec.rows;
     state.classWindowDays = rec.windowDays || 60;
     state.classPrayers = pray.rows;
     state.classMembers = mem.members;
+    if (stale(gen)) return;            // 데이터는 받아 뒀다. 화면만 덮어쓰지 않는다
   }
 
   const kindLabel = kindTab === 'student' ? '학생' : '학부모';

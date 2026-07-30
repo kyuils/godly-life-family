@@ -17,8 +17,9 @@ export async function render(root) {
     try {
       const res = await fetch('data/index.json');
       const data = await res.json();
-      if (stale(gen)) return;          // 그 사이 다른 탭으로 이동했다
+      // 참고자료는 공개 정적 자료다 — 받아 뒀다가 다음에 재사용한다(버리지 않는다).
       state.library = data;
+      if (stale(gen)) return;          // 그 사이 다른 탭으로 이동했다 — 화면만 막는다
     } catch (e) {
       if (stale(gen)) return;
       root.innerHTML = '<div class="empty-note">자료를 불러오지 못했습니다.</div>';
@@ -59,9 +60,9 @@ async function renderDoc(root, id) {
     try {
       const res = await fetch('data/' + meta.file);
       const parsed = await res.json();
-      if (stale(gen)) return;          // 로딩 중에 탭이 바뀌었다 — 덮어쓰지 않는다
       doc = parsed;
-      state.libraryDocs[id] = doc;
+      state.libraryDocs[id] = doc;     // 받아 둔 본문은 캐시해 다음 열람을 빠르게
+      if (stale(gen)) return;          // 로딩 중에 탭이 바뀌었다 — 화면만 막는다
     } catch (e) {
       if (stale(gen)) return;
       toast('본문을 불러오지 못했습니다.');

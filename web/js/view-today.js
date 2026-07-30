@@ -143,6 +143,9 @@ export function render(root) {
   }
 
   el('#t-toggle').onclick = function () {
+    // 저장이 진행 중일 수 있다. 세대를 올려 늦게 끝난 저장이 이 화면을 덮어쓰지
+    // 못하게 한다 — 그러지 않으면 전환 직후 입력한 글자가 사라진다 (6차 검토 ⑥).
+    bumpGeneration();
     editDate = isToday ? addDays(todayStr(), -1) : null;
     render(root);
   };
@@ -153,12 +156,14 @@ export function render(root) {
       b.setAttribute('aria-pressed', on ? 'true' : 'false');
     };
   });
-  el('#t-save').onclick = function () { save(root); };
+  // 프라미스를 돌려준다 — 테스트가 저장 완료를 기다릴 수 있게 한다.
+  el('#t-save').onclick = function () { return save(root); };
 }
 
 async function save(root) {
   const btn = el('#t-save');
   const gen = bumpGeneration();        // 저장 중에 탭이 바뀌면 렌더를 포기한다
+  const owner = api.getSessionEmail(); // 응답 도착 시 같은 사람인지 확인할 기준
   btn.disabled = true;                 // 더블 서브밋 방지 (계약 §4.2)
   btn.textContent = '저장 중...';
   try {
@@ -180,12 +185,15 @@ async function save(root) {
       return;
     }
     const fresh = await api.call('getMyRecords', { months: state.months }, { noCache: true });
+    // 세션이 파기된 뒤 늦게 도착한 응답으로 state를 되살리지 않는다 (6차 검토 ②).
+    if (api.getSessionEmail() !== owner) return;
     if (fresh.ok) {
       state.records = fresh.rows;
       // statsRecords는 «로그인 시 확보한 창»이 기준이다(state.js). 달력에서 과거로
-      // 이동해 months가 좁아진 상태로 덮어쓰면 연속기록이 갑자기 줄어 보인다.
-      // 이번 달이 창에 들어 있을 때만 갱신한다 (5차 검토 N5).
-      if (state.months.indexOf(targetDate().slice(0, 7)) >= 0) state.statsRecords = fresh.rows;
+      // 이동해 months가 좁아진 상태로 통째로 덮어쓰면 연속기록이 갑자기 줄어 보인다.
+      // 교체하지 말고 **날짜 키로 병합**한다 — 창이 좁아져도 기존 지표가 보존된다
+      // (6차 검토 ③: «편집한 달이 창에 있는가»는 목적과 다른 명제였다).
+      state.statsRecords = mergeByDate(state.statsRecords, fresh.rows);
     }
     if (stale(gen)) return;            // 데이터는 갱신했다. 화면만 덮어쓰지 않는다.
     toast('저장했습니다.');
@@ -199,6 +207,16 @@ async function save(root) {
       btn.textContent = '저장하기';
     }
   }
+}
+
+/** 날짜 키로 병합. b가 같은 날짜를 가지면 b가 이긴다(더 최신 응답). */
+function mergeByDate(a, b) {
+  const map = new Map();
+  (a || []).forEach(function (r) { map.set(r.date, r); });
+  (b || []).forEach(function (r) { map.set(r.date, r); });
+  return Array.from(map.values()).sort(function (x, y) {
+    return x.date < y.date ? -1 : x.date > y.date ? 1 : 0;
+  });
 }
 
 export function formatKo(dateStr) {

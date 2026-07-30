@@ -22,7 +22,9 @@ export function isMock() {
  * 이 순서가 뒤바뀌면 이전 사용자의 화면 데이터가 잠깐이라도 노출된다.
  */
 function applyToken(email, idToken) {
-  const prev = api.getSessionEmail();
+  // ★ api 세션은 로그아웃·만료 때 비워지므로, 그것만 보면 «로그아웃 후 다른 사람 로그인»을
+  //   놓친다. 화면이 마지막으로 알고 있던 사용자(state.session)도 함께 본다 (6차 검토 ②).
+  const prev = api.getSessionEmail() || (state.session && state.session.email) || null;
   if (prev && prev !== String(email).toLowerCase()) {
     api.clearCache();
     resetUserData();

@@ -117,7 +117,10 @@ function bindCards(root) {
 }
 
 async function reload(root, gen) {
+  const owner = api.getSessionEmail();
   const res = await api.call('getMyPrayers', {}, { noCache: true });
+  // 세션이 파기된 뒤 늦게 도착한 응답으로 state를 되살리지 않는다 (6차 검토 ②).
+  if (api.getSessionEmail() !== owner) return;
   if (res.ok) state.prayers = res.rows;
   if (gen !== undefined && stale(gen)) return;  // 그 사이 다른 탭으로 이동했다
   render(root);

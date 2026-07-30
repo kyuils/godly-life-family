@@ -184,6 +184,16 @@ check('await 뒤 화면을 다시 그리는 뷰는 stale 가드를 쓴다', () =
   return offenders.length === 0 || 'stale 가드 없음: ' + offenders.join(', ');
 });
 
+// 데이터를 받아 오는 await 형태를 모두 찾는다.
+// api.call만 보면 Promise.all([...])·fetch(...)로 감싼 경우를 놓친다 —
+// 실제로 view-class.js가 그 형태로 검사를 통과하면서 규칙을 어기고 있었다 (6차 검토 ④).
+const AWAIT_FETCH = /await\s+(?:api\.call|fetch|Promise\.all)\s*\(/g;
+function findNextAwaitCall(src, from) {
+  AWAIT_FETCH.lastIndex = from;
+  const m = AWAIT_FETCH.exec(src);
+  return m ? m.index : -1;
+}
+
 check('★ 받아 온 응답을 stale 가드로 버리지 않는다', () => {
   // ★ 이 검사가 진짜다. "파일 어딘가에 stale이 있는가"는 가드를 **잘못된 자리**에 둔
   //   결함을 잡지 못한다(5차 검토에서 실제로 5경로 발생).
@@ -195,14 +205,15 @@ check('★ 받아 온 응답을 stale 가드로 버리지 않는다', () => {
   //   사용자에게는 «저장이 안 됐다» «지웠는데 그대로다»로 보인다.
   //   규칙: 데이터 갱신은 항상 수행하고, stale은 화면 그리기·토스트만 막는다.
   const offenders = [];
-  fs.readdirSync(JS).filter((f) => f.indexOf('view-') === 0).forEach((f) => {
+  const targets = fs.readdirSync(JS).filter((f) => f.indexOf('view-') === 0).concat(['app.js']);
+  targets.forEach((f) => {
     const src = codeOnly(read(path.join(JS, f)));
     let at = 0;
     for (;;) {
-      const call = src.indexOf('await api.call(', at);
+      const call = findNextAwaitCall(src, at);
       if (call < 0) break;
-      // api.call( 의 여는 괄호부터 짝이 맞는 닫는 괄호를 찾는다.
-      let k = src.indexOf('(', call + 'await api.call'.length - 1);
+      // 여는 괄호부터 짝이 맞는 닫는 괄호를 찾는다.
+      let k = src.indexOf('(', call);
       let depth = 0;
       for (; k < src.length; k++) {
         if (src[k] === '(') depth++;

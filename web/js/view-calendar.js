@@ -143,6 +143,7 @@ function cellHtml(c) {
  */
 async function ensureMonthLoaded(ym, root) {
   const gen = bumpGeneration();
+  const owner = api.getSessionEmail();   // 응답 도착 시 같은 사람인지 확인할 기준
 
   // 이미 로드된 달이면 곧바로 옮긴다.
   if (state.months.indexOf(ym) >= 0) { viewYm = ym; render(root); return; }
@@ -164,10 +165,13 @@ async function ensureMonthLoaded(ym, root) {
     return;
   }
 
+  // 세션이 파기된 뒤 늦게 도착한 응답으로 state를 되살리지 않는다 (6차 검토 ②).
+  if (api.getSessionEmail() !== owner) return;
+
   // ★ 받아 온 데이터는 **중단됐어도 버리지 않는다.**
-  // months가 넓어지고 records에 그 달이 추가되는 것뿐이라, 보고 있던 달의 표시는
-  // 그대로 정확하다. 여기서 버리면 애써 받은 데이터를 잃고 다음에 또 받아야 한다.
-  // (규칙: 데이터 갱신은 항상 수행하고, stale은 화면 이동·그리기만 막는다)
+  // (규칙: 데이터 갱신은 «같은 사람일 때» 항상 수행하고, stale은 화면 이동·그리기만 막는다)
+  // ※ months가 6개를 넘으면 트리밍되어 보고 있던 달이 빠질 수 있다. 그 경우는
+  //   render()의 복구 가드(위쪽)가 다시 불러온다.
   state.months = months;
   state.records = res.rows;
 

@@ -12,6 +12,7 @@
 
 // --- 최소 DOM 스텁 (화면 모듈이 만지는 것만) ---------------------------------
 const nodes = new Map();
+const handlers = new Map();
 
 function makeNode(id) {
   const classes = new Set();
@@ -42,11 +43,14 @@ function makeNode(id) {
     remove() {},
     focus() {},
     setSelectionRange() {},
+    set onclick(fn) { handlers.set(this.id, fn); },
+    get onclick() { return handlers.get(this.id); },
   };
 }
 
 function resetDom(ids) {
   nodes.clear();
+  handlers.clear();
   ids.forEach((id) => nodes.set(id, makeNode(id)));
 }
 
@@ -65,23 +69,38 @@ if (typeof globalThis.CustomEvent !== 'function') {
 globalThis.fetch = async () => ({ ok: true, json: async () => ({ ok: true, rows: [] }) });
 globalThis.MccheynePlan = null;
 
-const { state } = await import('../web/js/state.js');
+const { state, bumpGeneration } = await import('../web/js/state.js');
+const api = await import('../web/js/api.js');
 const viewToday = await import('../web/js/view-today.js');
 const viewPrayer = await import('../web/js/view-prayer.js');
 
 let pass = 0;
 const failures = [];
 
+function report(label, r) {
+  if (r === true || r === undefined) { pass++; console.log('  [PASS] ' + label); return; }
+  failures.push(label + ' — ' + r);
+  console.log('  [FAIL] ' + label + ' — ' + r);
+}
+
+function reportErr(label, e) {
+  const msg = e && e.message ? e.message : e;
+  failures.push(label + ' — ' + msg);
+  console.log('  [FAIL] ' + label + ' — ' + msg);
+}
+
+// 동기·비동기 검사 모두 받는다.
 function t(label, fn) {
   try {
     const r = fn();
-    if (r === true || r === undefined) { pass++; console.log('  [PASS] ' + label); return; }
-    failures.push(label + ' — ' + r);
-    console.log('  [FAIL] ' + label + ' — ' + r);
+    if (r && typeof r.then === 'function') {
+      return r.then((v) => report(label, v)).catch((e) => reportErr(label, e));
+    }
+    report(label, r);
   } catch (e) {
-    failures.push(label + ' — ' + (e && e.message ? e.message : e));
-    console.log('  [FAIL] ' + label + ' — ' + (e && e.message ? e.message : e));
+    reportErr(label, e);
   }
+  return undefined;
 }
 
 function todayStr() {
@@ -205,6 +224,81 @@ t('restoreDraftContext는 draft가 없을 때 안전하다', () => {
 //   로그인 화면에 둔 채 자정을 두 번 넘겨야 도달하므로 시간 조작 없이는 재현할 수 없다.
 //   프로덕션 코드에 테스트 전용 훅을 넣지 않기 위해 여기서는 검증하지 않는다 —
 //   미검증 분기임을 명시해 둔다.
+
+console.log('\n--- ★ 화면이 바뀌어도 데이터는 갱신된다 ---');
+
+// 이 두 항목이 6차 검토까지 이어진 «저장했는데 사라진 것처럼 보임»의 회귀 방어다.
+// 규칙: 데이터 갱신은 (같은 사람일 때) 항상 수행하고, stale은 화면 그리기만 막는다.
+
+await t('★ 저장 중 탭이 바뀌어도 state.records에 그날 기록이 반영된다', async () => {
+  const today = todayStr();
+  resetDom(TODAY_IDS);
+  state.session = { email: 'save@example.com', name: 'S', role: 'student', kind: 'student' };
+  state.months = [today.slice(0, 7)];
+  state.records = [];
+  state.statsRecords = [];
+  api.clearSession();
+  api.setSession('save@example.com', 't');
+
+  // setRecord → getMyRecords 순서로 응답한다.
+  let call = 0;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    call += 1;
+    const body = call === 1
+      ? { ok: true }
+      : { ok: true, rows: [{ date: today, wordRead: true, verse: '저장됨', resolution: '', intercession: false, updatedAt: '' }] };
+    return { ok: true, json: async () => body };
+  };
+
+  try {
+    const root = document.querySelector('#view');
+    viewToday.render(root);                      // 핸들러 연결
+    document.querySelector('#t-verse').value = '저장됨';
+    document.querySelector('#t-word').classList.add('checked');
+    const saving = handlers.get('t-save')();     // 저장 시작
+    bumpGeneration();                 // 저장 왕복 중에 탭 전환
+    await saving;
+    const hit = state.records.find((r) => r.date === today);
+    if (!hit) return '★ state.records에 반영되지 않음 — 달력이 «기록 없음»으로 그린다';
+    return hit.wordRead === true || '말씀읽음이 반영되지 않음';
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+await t('★ 세션이 파기된 뒤 도착한 응답은 state를 되살리지 않는다', async () => {
+  const today = todayStr();
+  resetDom(TODAY_IDS);
+  state.session = { email: 'gone@example.com', name: 'G', role: 'student', kind: 'student' };
+  state.months = [today.slice(0, 7)];
+  state.records = [];
+  api.clearSession();
+  api.setSession('gone@example.com', 't');
+
+  let call = 0;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    call += 1;
+    if (call === 1) api.clearSession();   // 저장 왕복 중에 세션 만료/로그아웃
+    const body = call === 1
+      ? { ok: true }
+      : { ok: true, rows: [{ date: today, wordRead: true, verse: '앞사람 글', resolution: '', intercession: false, updatedAt: '' }] };
+    return { ok: true, json: async () => body };
+  };
+
+  try {
+    const root = document.querySelector('#view');
+    viewToday.render(root);
+    document.querySelector('#t-verse').value = '앞사람 글';
+    document.querySelector('#t-word').classList.add('checked');
+    await handlers.get('t-save')();
+    const leaked = state.records.find((r) => r.verse === '앞사람 글');
+    return !leaked || '★ 파기된 세션의 응답이 state에 남음 — 다음 사람에게 보일 수 있다';
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
 
 console.log('\n--- 저장 시각 표기 ---');
 
