@@ -476,7 +476,126 @@ check('★ 탭 버튼은 손가락으로 누를 만큼 크다', () => {
   const marks = ['tab-icon', 'tab-label'].filter((c) => !app.includes(c));
   if (marks.length) return 'app.js가 탭을 그릴 때 빠뜨린 요소: ' + marks.join(', ');
   const styled = ['tab-icon', 'tab-label'].filter((c) => !new RegExp('\\.' + c + '\\s*\\{').test(css));
-  return styled.length === 0 || 'css에 크기 규칙이 없는 요소: ' + styled.join(', ');
+  if (styled.length) return 'css에 크기 규칙이 없는 요소: ' + styled.join(', ');
+
+  // ★ 위 검사만으로는 «아이콘을 18px, 글자를 10px로 줄여도» 그대로 통과한다.
+  //   실제로 사용자가 신고한 것은 «작아서 못 누른다»이므로 크기를 직접 본다.
+  //   2026-07-31에 «탭을 제목줄 한 줄에 넣자»는 요청이 있었는데, 그렇게 하면
+  //   교사 5탭 기준 한 탭이 30~36px가 되어 이 검사가 막아야 하는 바로 그 상태가 된다.
+  const iconSize = /\.topnav\s+\.tab-icon\s*\{[^}]*font-size\s*:\s*([\d.]+)rem/.exec(css);
+  if (!iconSize) return '.topnav .tab-icon의 font-size(rem)를 찾지 못했다';
+  if (Number(iconSize[1]) < 1.25) {
+    return '탭 아이콘이 ' + iconSize[1] + 'rem으로 작다 (1.25rem = 20px 이상 유지)';
+  }
+
+  // 탭이 제목줄 안으로 들어가면 폭이 절반 이하가 된다 — 마크업에서 막는다.
+  const html = read(path.join(WEB, 'index.html'));
+  const bar = /<div class="appbar-inner">([\s\S]*?)<\/div>\s*<\/header>/.exec(html);
+  if (bar && /id="nav"/.test(bar[1])) {
+    return '메뉴(#nav)가 제목줄 안에 있다 — 교사 5탭 기준 한 탭이 30~36px가 된다';
+  }
+  return true;
+});
+
+check('★ 제목줄은 흘러가고 메뉴만 화면 위에 고정된다', () => {
+  // 2026-07-31 요청: "아래 내용이 많이 보이게".
+  // .appbar가 sticky로 돌아가면 제목줄 56px가 다시 상시 점유가 되어
+  // 요청이 조용히 되돌려진다 — 화면을 스크롤해 봐야만 알 수 있다.
+  const css = read(path.join(WEB, 'css', 'app.css'));
+
+  const appbar = /\.appbar\s*\{([^}]*)\}/.exec(css);
+  if (!appbar) return 'app.css에서 .appbar 규칙을 찾지 못했다';
+  if (/position\s*:\s*sticky|position\s*:\s*fixed/.test(appbar[1])) {
+    return '.appbar가 화면에 고정돼 있다 — 제목줄이 흘러가야 아래 내용이 더 보인다';
+  }
+
+  const topnav = /\.topnav\s*\{([^}]*)\}/.exec(css);
+  if (!topnav) return 'app.css에서 .topnav 규칙을 찾지 못했다';
+  if (!/position\s*:\s*sticky/.test(topnav[1])) return '.topnav가 sticky가 아니다 — 메뉴가 위로 사라진다';
+  // 제목줄이 흘러가므로 top에서 --appbar-h를 빼야 한다. 남겨 두면 메뉴가
+  // 화면 위에서 56px 아래에 붙어 그만큼이 빈 채로 남는다.
+  if (/top\s*:[^;]*--appbar-h/.test(topnav[1])) {
+    return '.topnav의 top이 아직 제목줄 높이만큼 내려가 있다 — 위에 빈 띠가 생긴다';
+  }
+  return true;
+});
+
+check('★ 앱으로 설치하기 안내가 화면과 코드에 모두 있다', () => {
+  // 2026-07-31 요청: "가입고 로그인시 앱 형태로 설치되게 안내".
+  const html = read(path.join(WEB, 'index.html'));
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+
+  // 로그인 화면과 가입 화면 «둘 다»에 자리가 있어야 한다 (요청 원문이 «가입고 로그인시»).
+  const ids = ['install-banner', 'install-go', 'install-banner-reg', 'install-go-reg'];
+  const missing = ids.filter((id) => !html.includes('id="' + id + '"'));
+  if (missing.length) return 'index.html에 없는 요소: ' + missing.join(', ');
+
+  // 기본은 숨김 — 이미 설치했거나 카톡 안이면 떠서는 안 된다.
+  if (!/id="install-banner"[^>]*\shidden/.test(html)) return '#install-banner가 기본 hidden이 아니다';
+
+  // ★ beforeinstallprompt를 <head>에서 미리 잡아야 한다. app.js는 module이라
+  //   defer로 늦게 도는데, 캐시된 재방문에서는 이벤트가 그 전에 발화한다.
+  //   놓치면 안내가 «떴다 안 떴다» 한다.
+  const head = /<head>([\s\S]*?)<\/head>/.exec(html);
+  if (!head) return 'index.html에 <head>가 없다';
+  // ★ 단어만 찾으면 안 된다. 바로 위 주석에 «beforeinstallprompt»가 적혀 있어서,
+  //   등록 코드를 지워도 주석에 걸려 통과한다(되돌리기 검증에서 실제로 놓쳤다).
+  //   실제 등록 호출을 본다.
+  if (!/addEventListener\s*\(\s*['"]beforeinstallprompt['"]/.test(head[1])) {
+    return '<head>에서 beforeinstallprompt를 잡지 않는다 — 안내가 간헐적으로 안 뜬다';
+  }
+  // 잡아서 어디에 두는지까지 본다 — install.js가 읽는 자리와 맞아야 한다.
+  if (!/__bip/.test(head[1])) return '<head>가 설치 이벤트를 window.__bip에 담지 않는다';
+
+  const fns = ['installMode', 'installCopy', 'runInstallPrompt', 'isStandalone', 'setupInstallBanner'];
+  const notUsed = fns.filter((f) => !app.includes(f));
+  return notUsed.length === 0 || 'app.js가 쓰지 않는 함수: ' + notUsed.join(', ');
+});
+
+check('★ 자료 화면 머리줄이 다른 화면과 섞이지 않는다', () => {
+  // ☰를 오른쪽 끝에 두려면 flex 배치가 필요한데, .section-head는 달력·우리반·
+  // 기도 화면이 함께 쓰는 class다. 거기에 배치를 주면 세 화면이 같이 바뀐다.
+  const lib = codeOnly(read(path.join(JS, 'view-library.js')));
+  const css = read(path.join(WEB, 'css', 'app.css'));
+
+  if (!/class="lib-head"/.test(lib)) return 'view-library가 .lib-head를 쓰지 않는다';
+  if (/lib-menu[\s\S]{0,200}class="section-head"/.test(lib) ||
+      /class="section-head"[\s\S]{0,200}lib-menu/.test(lib)) {
+    return '자료 머리줄이 아직 .section-head를 쓴다 — 다른 화면까지 바뀐다';
+  }
+  const head = /\.lib-head\s*\{([^}]*)\}/.exec(css);
+  if (!head) return 'app.css에 .lib-head 규칙이 없다';
+  if (!/display\s*:\s*flex/.test(head[1])) return '.lib-head가 flex가 아니다 — ☰가 왼쪽에 몰린다';
+
+  // 제목이 남는 폭을 다 먹어야 ☰가 오른쪽 끝으로 밀린다.
+  const title = /\.lib-head-title\s*\{([^}]*)\}/.exec(css);
+  if (!title || !/flex\s*:\s*1/.test(title[1])) {
+    return '.lib-head-title에 flex:1이 없다 — ☰가 오른쪽 끝으로 가지 않는다';
+  }
+  return true;
+});
+
+check('★ 자료 ☰ 시트가 좌우 2단이고 각 단이 따로 스크롤된다', () => {
+  const lib = codeOnly(read(path.join(JS, 'view-library.js')));
+  const css = read(path.join(WEB, 'css', 'app.css'));
+
+  // ★ CSS만으로는 안 된다. 제목·버튼이 평면으로 나열된 상태에서 부모에 grid를
+  //   주면 그 전부가 좌우로 «번갈아» 꽂힌다. 두 단을 감싸는 래퍼가 필수다.
+  const cols = (lib.match(/class="nav-col"/g) || []).length;
+  if (cols !== 2) return 'view-library의 .nav-col 래퍼가 ' + cols + '개다 (2개여야 좌우로 갈린다)';
+
+  const sheet = /\.nav-sheet\s*\{([^}]*)\}/.exec(css);
+  if (!sheet) return 'app.css에 .nav-sheet 규칙이 없다';
+  if (!/grid-template-columns/.test(sheet[1])) return '.nav-sheet가 2단이 아니다';
+  // 높이 상한이 없으면 각 단이 내용만큼 늘어나 시트 전체가 스크롤된다.
+  if (!/max-height/.test(sheet[1])) return '.nav-sheet에 max-height가 없다 — 단별 스크롤이 동작하지 않는다';
+
+  const body = /\.nav-col-body\s*\{([^}]*)\}/.exec(css);
+  if (!body) return 'app.css에 .nav-col-body 규칙이 없다';
+  if (!/overflow-y\s*:\s*auto/.test(body[1])) return '.nav-col-body가 스크롤되지 않는다';
+  // grid 자식의 기본 min-height:auto 때문에 이것이 없으면 줄어들지 않는다.
+  if (!/min-height\s*:\s*0/.test(body[1])) return '.nav-col-body에 min-height:0이 없다 — 단별 스크롤이 동작하지 않는다';
+  return true;
 });
 
 check('★ 화면·탭을 옮기면 맨 위에서 시작한다', () => {
