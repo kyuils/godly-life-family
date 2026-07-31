@@ -371,6 +371,39 @@ check('★ 홈 아이콘 4개가 실제 탭과 연결된다', () => {
   return /case 'home'/.test(app) || "renderTab에 case 'home'이 없다 — 홈이 빈 화면이 된다";
 });
 
+check('★ 가입 화면의 분류 버튼·입력칸이 코드와 화면에 모두 있다', () => {
+  // renderRegister/setKind는 el('#reg-kind-…')·el('#reg-school-row')를 무조건
+  // 참조한다. ui.js의 el()은 없으면 null을 돌려주므로, id가 하나만 어긋나도
+  // null.onclick / null.classList 에서 TypeError가 나고 화면이 «처음 오셨네요»
+  // 에서 멈춘 채 버튼이 죽는다. 이 화면은 **모든 신규 가입자가 반드시 지나는
+  // 유일한 길**이라 조용히 깨지면 아무도 가입하지 못한다.
+  const html = read(path.join(WEB, 'index.html'));
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+
+  const block = /const REG_KINDS = \{([\s\S]*?)\n\};/.exec(app);
+  if (!block) return 'app.js에서 REG_KINDS를 찾지 못함';
+  const kinds = [...block[1].matchAll(/^\s{2}([a-z]+):/gm)].map((m) => m[1]);
+  if (!kinds.length) return 'REG_KINDS가 비어 있다';
+
+  // 코드의 분류 ↔ 화면의 버튼을 «양방향»으로 대조한다. 한쪽만 보면 화면에만
+  // 있는 유령 버튼(눌러도 반응 없음)을 놓친다.
+  const htmlKinds = [...html.matchAll(/id="reg-kind-([a-z]+)"/g)].map((m) => m[1]);
+  const missing = kinds.filter((k) => !htmlKinds.includes(k));
+  if (missing.length) return 'index.html에 없는 분류 버튼: ' + missing.map((k) => '#reg-kind-' + k).join(', ');
+  const ghost = htmlKinds.filter((k) => !kinds.includes(k));
+  if (ghost.length) return 'REG_KINDS에 없는 버튼: ' + ghost.join(', ') + ' (눌러도 아무 일도 안 일어난다)';
+
+  // 계약 §2.1: 학교는 학생에게만 보인다 — 그 토글 대상이 실제로 있어야 한다.
+  const ids = ['reg-kind-student', 'reg-school-row', 'reg-school', 'reg-extra-label', 'reg-extra', 'reg-name', 'reg-code', 'reg-submit', 'reg-cancel'];
+  const gone = ids.filter((id) => !html.includes('id="' + id + '"'));
+  if (gone.length) return 'index.html에 없는 요소: ' + gone.join(', ');
+
+  // school: true 인 분류가 학생 하나뿐인지 (학부모 화면에 학교가 뜨면 요청 위반)
+  const withSchool = [...block[1].matchAll(/^\s{2}([a-z]+):.*school:\s*true/gm)].map((m) => m[1]);
+  return withSchool.join(',') === 'student' ||
+    '학교 칸이 보이는 분류가 student가 아니다: [' + withSchool.join(', ') + ']';
+});
+
 check('★ 인앱 브라우저 안내가 화면과 코드에 모두 있다', () => {
   // 카카오톡 인앱 브라우저에서는 구글 로그인 창을 다녀오는 사이 페이지가 다시
   // 읽혀 로그인이 풀린다. 안내가 빠지면 사용자는 «로그인이 안 된다»만 겪는다
