@@ -567,6 +567,25 @@ check('★ 자료 화면 머리줄이 다른 화면과 섞이지 않는다', () 
   if (!head) return 'app.css에 .lib-head 규칙이 없다';
   if (!/display\s*:\s*flex/.test(head[1])) return '.lib-head가 flex가 아니다 — ☰가 왼쪽에 몰린다';
 
+  // ★ 스크롤해도 남아 있어야 한다 (2026-07-31 2차 신고: "자료를 스크롤해서 올리면
+  //   선택하는 메뉴가 같이 올라가서 안 보이게 돼"). 이 줄에 ☰가 있어서, 사라지면
+  //   다른 자료로 갈 방법이 없어진다.
+  if (!/position\s*:\s*sticky/.test(head[1])) {
+    return '.lib-head가 sticky가 아니다 — 스크롤하면 ☰가 사라져 다른 자료로 갈 수 없다';
+  }
+  // 탭 줄 높이만큼 내려와야 한다. 0이면 탭 줄에 가려 반쯤 숨는다.
+  if (!/top\s*:[^;]*--topnav-h/.test(head[1])) {
+    return '.lib-head의 top이 탭 줄 높이(--topnav-h)를 쓰지 않는다 — 탭에 가린다';
+  }
+  // 배경이 없으면 본문이 이 줄 뒤로 비쳐 지나간다.
+  if (!/background\s*:/.test(head[1])) return '.lib-head에 배경색이 없다 — 본문이 뒤로 비친다';
+
+  // --topnav-h는 탭 수(3·4·5)와 글자 크기에 따라 달라진다. 실제로 재야 한다.
+  const app2 = codeOnly(read(path.join(JS, 'app.js')));
+  if (!/setProperty\s*\(\s*['"]--topnav-h['"]/.test(app2)) {
+    return 'app.js가 --topnav-h를 실측해 넣지 않는다 — 탭 수가 바뀌면 틈이 벌어진다';
+  }
+
   // 제목이 남는 폭을 다 먹어야 ☰가 오른쪽 끝으로 밀린다.
   const title = /\.lib-head-title\s*\{([^}]*)\}/.exec(css);
   if (!title || !/flex\s*:\s*1/.test(title[1])) {
