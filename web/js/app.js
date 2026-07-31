@@ -9,6 +9,7 @@ import * as S from './stats.js';
 import { loadMyData } from './load.js';
 import { el, escapeHtml, toast, closeSheet } from './ui.js';
 import { detectInApp, externalOpenUrl } from './inapp.js';
+import { installMode, installCopy, runInstallPrompt, isStandalone } from './install.js';
 
 import * as viewHome from './view-home.js';
 import * as viewToday from './view-today.js';
@@ -65,6 +66,44 @@ function show(screen) {
  * 이 앱에서는 앞사람 기록이 뒷사람에게 새는 문이 된다(보안 불변식 7).
  * 그래서 저장하지 않고 바깥 브라우저로 열도록 안내한다.
  */
+/**
+ * «앱으로 설치하기» 안내 (2026-07-31 요청: "가입고 로그인시 앱 형태로 설치되게 안내").
+ *
+ * 로그인 화면과 가입 화면 두 곳에서 같은 함수를 쓴다. 홈에 두지 않는 이유:
+ *  - 요청 원문이 «가입고 로그인시»다
+ *  - 홈에 띠를 얹으면 같은 날 되찾은 세로 공간을 그 자리에서 도로 까먹는다
+ *  - 로그인하면 사라지는 화면이라 «닫음» 상태를 저장할 필요가 없다
+ *    (브라우저 저장소는 보안 불변식 7 때문에 web/js에서 쓸 수 없다)
+ */
+function setupInstallBanner(bannerSel, buttonSel) {
+  const banner = el(bannerSel);
+  if (!banner) return;
+
+  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+  const mode = installMode(ua, {
+    standalone: isStandalone(window),
+    hasPrompt: !!window.__bip,
+  });
+  const copy = installCopy(mode);
+  if (!copy) { banner.hidden = true; return; }
+
+  banner.hidden = false;
+  banner.querySelector('.install-title').textContent = copy.title;
+  banner.querySelector('.install-desc').textContent = copy.desc;
+
+  const btn = el(buttonSel);
+  if (!btn) return;
+  if (!copy.action) { btn.hidden = true; return; }
+  btn.hidden = false;
+  btn.textContent = copy.action;
+  btn.onclick = async function () {
+    // prompt()는 사용자 제스처 안에서 한 번만 유효하다. 쓰고 나면 버튼을 감춘다.
+    const shown = await runInstallPrompt(window);
+    if (shown) banner.hidden = true;
+    else toast('브라우저 메뉴에서 «홈 화면에 추가»를 선택해 주세요.');
+  };
+}
+
 function setupInAppBanner() {
   const banner = el('#inapp-banner');
   if (!banner) return;
@@ -109,6 +148,7 @@ function renderLogin() {
   closeSheet();
   show('screen-login');
   setupInAppBanner();
+  setupInstallBanner('#install-banner', '#install-go');
   const holder = el('#gis-button');
   holder.innerHTML = '';
   auth.initGis(holder, afterSignIn);
@@ -158,6 +198,7 @@ const REG_KINDS = {
 
 function renderRegister(email) {
   show('screen-register');
+  setupInstallBanner('#install-banner-reg', '#install-go-reg');
   el('#reg-account').textContent = email || '';
   el('#reg-error').textContent = '';
   el('#reg-name').value = '';
