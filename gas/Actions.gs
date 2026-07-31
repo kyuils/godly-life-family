@@ -543,13 +543,16 @@ function handleGetAllRecords(body) {
   const from = addDaysToDateStr_(today, -(days - 1));
   const months = ymRange_(from, today);
 
+  // 성도는 «우리반»이 아니다 (계약 §2.2b). 교사 화면에 섞이지 않도록 걸러낸다.
+  // ★ 루프 밖에서 한 번만 구한다. 안에서 부르면 최대 수천 번 호출되고, 무엇보다
+  //   kindLabel_은 미지 kind에 throw하므로 «루프 한복판에서 교사 화면 전체가
+  //   죽는» 구조가 된다.
+  const MEMBER_LABEL = kindLabel_('member');
   const rows = [];
   for (let i = 0; i < months.length; i++) {
     const t = readTable_(recordsSheetName_(months[i]));
     for (let j = 0; j < t.rows.length; j++) {
-      // 성도는 «우리반»이 아니다 (계약 §2.2b). 교사 화면에 섞이지 않도록 여기서 거른다.
-      // 이 규칙이 §2.7·§4.5의 100명 용량 전제를 유지시킨다.
-      if (String(t.rows[j]['구분'] || '') === kindLabel_('member')) continue;
+      if (String(t.rows[j]['구분'] || '') === MEMBER_LABEL) continue;
       const d = formatDate_(t.rows[j]['날짜']);
       if (d >= from && d <= today) rows.push(rowToAllRecord_(t.rows[j]));
     }
