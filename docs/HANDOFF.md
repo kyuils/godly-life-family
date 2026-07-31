@@ -107,7 +107,17 @@ node scripts/fetch-library.mjs     # 원격에서 자료 재수집 (네트워크
 
 ## 7. 다음에 할 일 — 배포 3 (가입 3분류)
 
-**계획서: [`docs/plans/2026-07-31-v2-step3-signup.md`](plans/2026-07-31-v2-step3-signup.md) (r3, 검토 2회 반영)**
+> **코드·문서·테스트는 끝났고 GitHub에 올라가 있다. 남은 것은 «서버(GAS) 배포»뿐이다.**
+> 사후 시니어 검토도 반영을 마쳤다 → [`docs/reviews/2026-07-31-senior-review-v3.md`](reviews/2026-07-31-senior-review-v3.md)
+>
+> **집에서 이어서 할 일:**
+> 1. [`docs/plans/2026-07-31-v2-step3-signup.md`](plans/2026-07-31-v2-step3-signup.md) **§10의 8단계**를 순서대로.
+>    ★ **서버(GAS) 먼저, 웹 나중.** 반대로 하면 「혜림교회 성도」를 골랐을 때 원인 불명 오류가 난다.
+>    (웹은 이미 올라가 있으므로, GAS를 올리는 즉시 순서가 맞춰진다)
+> 2. 그다음 [`docs/ops/05-test-checklist.md`](ops/05-test-checklist.md)의 **B-2 «혜림교회 성도»** 절을 실제 계정으로.
+>    성도에게 기도 탭이 하나라도 보이면 GAS 재배포가 안 된 것이다.
+
+**계획서: [`docs/plans/2026-07-31-v2-step3-signup.md`](plans/2026-07-31-v2-step3-signup.md) (r3, 검토 2회 + 사후 검토 반영)**
 
 확정된 설계:
 
@@ -122,8 +132,10 @@ node scripts/fetch-library.mjs     # 원격에서 자료 재수집 (네트워크
 - 만 14세 미만 동의는 담임교사가 **오프라인으로 이미 받았다** → 앱에 고지 UI 없음.
   다만 성도 분류에는 그 동의가 미치지 않아 «성인만» 안내 한 줄을 넣는다
 
-**착수 순서는 계획서 §8을 따른다. 특히 `web/js/load.js`를 서버 차단보다 먼저 고칠 것** —
-안 그러면 성도가 로그인 자체를 못 한다(검토에서 잡힌 치명 결함).
+**구현은 계획서 §8 순서대로 마쳤다.** 특히 `web/js/load.js`를 서버 차단보다 먼저 고쳤다 —
+이 파일은 모든 사용자에게 무조건 기도 목록을 요청하므로, 순서를 바꿨다면
+**성도가 로그인 직후 적재 실패로 앱에 들어오지 못했을 것**이다(검토에서 잡힌 치명 결함).
+되돌리면 실패하는 검사로 묶어 두었다.
 
 ---
 
@@ -135,4 +147,5 @@ node scripts/fetch-library.mjs     # 원격에서 자료 재수집 (네트워크
 | `docs/specs/2026-07-30-api-contract.md` | 시트 스키마 · API · 캐시 · 배포 설정 (단일 기준) |
 | `docs/ops/00-quickstart.md` ~ `06-operations.md` | 비개발자용 설치·운영 안내 |
 | `docs/plans/2026-07-31-v2-plan.md` | v2 전체 계획(배포 1·2·3 분할) |
-| `docs/plans/2026-07-31-v2-step3-signup.md` | 배포 3 상세 계획 (r3) |
+| `docs/plans/2026-07-31-v2-step3-signup.md` | 배포 3 상세 계획 (r3) + §10 배포 절차 8단계 |
+| `docs/reviews/2026-07-31-senior-review-v3.md` | 배포 3 사후 시니어 검토와 조치 내역 |
