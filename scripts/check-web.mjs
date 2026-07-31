@@ -404,6 +404,36 @@ check('★ 가입 화면의 분류 버튼·입력칸이 코드와 화면에 모�
     '학교 칸이 보이는 분류가 student가 아니다: [' + withSchool.join(', ') + ']';
 });
 
+check('★ 가입 화면 제목이 배경에 묻히지 않는다', () => {
+  // .cover-title은 «검은 표지 박스» 전용 흰색 글자다. 가입 화면(밝은 배경)이 이
+  // class를 재사용하는데 색을 되돌리지 않으면 «처음 오셨네요»가 통째로 사라진다.
+  // 화면을 열어 봐야만 보이는 종류라 정적으로 묶어 둔다 (2026-07-31 실제로 발생).
+  const html = read(path.join(WEB, 'index.html'));
+  const css = read(path.join(WEB, 'css', 'app.css'));
+
+  const reg = /<section[^>]*id="screen-register"[\s\S]*?<\/section>/.exec(html);
+  if (!reg) return 'index.html에서 가입 화면(section#screen-register)을 찾지 못함';
+  if (!reg[0].includes('cover-title')) return true;   // 재사용하지 않으면 이 위험이 없다
+
+  // .cover-title이 실제로 밝은 색(=어두운 배경 전용)인지 먼저 확인한다.
+  const coverRule = /\.cover-title\s*\{([^}]*)\}/.exec(css);
+  if (!coverRule) return 'app.css에서 .cover-title 규칙을 찾지 못함';
+  if (!/color\s*:\s*#(?:F|f)/.test(coverRule[1])) return true;   // 밝은 색이 아니면 문제없다
+
+  // 그렇다면 «가입 화면의 제목»을 겨냥해 색을 되돌리는 규칙이 있어야 한다.
+  // ★ 선택자를 정확히 봐야 한다. 처음에 «.register로 시작하고 color가 있는 규칙»으로
+  //   느슨하게 검사했더니 .register-sub{color:…} 같은 이웃 규칙에 걸려 늘 통과했다.
+  //   통과하지만 아무것도 검증하지 않는 검사였다.
+  const titleRule = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].find(([, sel, body]) => {
+    const s = sel.trim();
+    const targetsRegisterTitle = /\.register[\w-]*\s*[.\s>]\s*(h1|cover-title)/.test(s) ||
+      /\.register[\w-]*\.cover-title/.test(s);
+    return targetsRegisterTitle && /(^|;|\s)color\s*:/.test(body);
+  });
+  return !!titleRule ||
+    '.cover-title이 흰색인데 가입 화면 제목의 색을 되돌리는 규칙이 없다 — «처음 오셨네요»가 안 보인다';
+});
+
 check('★ 인앱 브라우저 안내가 화면과 코드에 모두 있다', () => {
   // 카카오톡 인앱 브라우저에서는 구글 로그인 창을 다녀오는 사이 페이지가 다시
   // 읽혀 로그인이 풀린다. 안내가 빠지면 사용자는 «로그인이 안 된다»만 겪는다
