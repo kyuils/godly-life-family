@@ -204,8 +204,16 @@
     @media(max-width:460px){.app{box-shadow:none;max-width:100%}}
 
     /* ====== APPBAR ====== */
+    /* ★ 제목줄은 «고정»이 아니라 «흘려보낸다» (2026-07-31 요청: 아래 내용이 더 보이게).
+         화면을 내리면 이름·로그아웃 줄 56px가 위로 빠지고 메뉴만 남는다.
+         상시 점유가 120px → 64px로 줄어든다.
+
+         요청은 «메뉴를 이름과 로그아웃 사이 한 줄에» 였는데, 그렇게 하면
+         교사 5탭 기준 한 탭이 30~36px가 되어 2026-07-30에 신고된 «메뉴가 작아
+         안 보인다»가 더 심해진다(고정비: 패딩 32 + 갭 16 + 로그아웃 78).
+         목표는 같고 수단만 바꾼 것이다. */
     .appbar{
-      position:sticky;top:0;z-index:10;
+      position:static;z-index:10;
       background:color-mix(in srgb, var(--semantic-background-normal-normal) 88%, transparent);
       backdrop-filter:saturate(180%) blur(32px);
       -webkit-backdrop-filter:saturate(180%) blur(32px);
@@ -278,6 +286,10 @@
        hero의 padding-bottom은 «박스 안쪽» 여백이라 바깥 간격이 되지 못한다. */
     .cover-features{display:flex;flex-direction:column;gap:18px;margin-top:28px}
     #inapp-banner{margin-top:24px}
+    #install-banner{margin-top:24px}
+    .cover-hero .install-banner{margin:0 0 16px}
+    /* 가입 화면에서는 오류 문구와 «등록하고 시작하기» 사이에 들어간다 */
+    #install-banner-reg{margin:0 var(--space-16) var(--space-14)}
     .feat-row{display:flex;align-items:center;gap:14px}
     .feat-icon{
       flex-shrink:0;width:44px;height:44px;border-radius:12px;
@@ -317,7 +329,9 @@
 
     /* ====== TOP NAV ====== */
     .topnav{
-      position:sticky;top:calc(env(safe-area-inset-top) + var(--appbar-h));z-index:9;
+      /* 제목줄이 흘러가고 이 줄만 맨 위에 붙는다. safe-area만큼 내려 두어야
+         설치 후 전체화면(standalone)에서 노치에 가리지 않는다. */
+      position:sticky;top:env(safe-area-inset-top);z-index:9;
       display:flex;
       border-bottom:1px solid var(--semantic-line-solid-normal);
       background:var(--semantic-background-normal-normal);
@@ -569,6 +583,19 @@
     .inapp-desc{font-size:var(--type-caption1-size);color:var(--semantic-label-normal);line-height:1.5;margin-bottom:var(--space-10)}
     .inapp-actions{display:flex;gap:var(--space-8);flex-wrap:wrap}
 
+    /* 앱으로 설치하기 안내 (2026-07-31 요청). 인앱 경고와 달리 «권유»라서
+       주의색이 아니라 차분한 선으로 두른다 — 경고와 헷갈리면 안 된다. */
+    .install-banner{
+      margin:0;padding:var(--space-12) var(--space-14);border-radius:var(--radius-lg);
+      background:var(--semantic-fill-alternative);
+      border:1px solid var(--semantic-line-solid-normal);
+    }
+    .install-title{font-size:var(--type-label1-size);font-weight:var(--weight-bold-text);color:var(--semantic-label-normal);margin-bottom:var(--space-4)}
+    .install-desc{font-size:var(--type-caption1-size);color:var(--semantic-label-neutral);line-height:1.5;margin:0}
+    .install-banner .btn{margin-top:var(--space-10)}
+    /* 안내 문구만 있고 버튼이 없는 경우(iOS·수동) 아래 여백이 뜨지 않도록 */
+    .install-banner .btn[hidden]{display:none}
+
     /* ── 라이트 전용 오버라이드: 밝고 따뜻한 크림/코랄 테마 (다크와 무관) ──
        다크 모드는 <html data-theme="dark">이므로 :root:not([data-theme="dark"])로
        라이트에서만 적용. 기존 토큰 정의는 건드리지 않고 캐스케이드로 덮는다. */
@@ -734,7 +761,46 @@
       font-size:12px;font-weight:800;
     }
 
-    /* ☰ 시트 — 다른 자료 + 목차 (휴대폰 폭이라 좌우 2단 대신 위아래 1단) */
+    /* 자료 화면 머리줄 — «‹ 제목 ☰». ☰는 오른쪽 끝에 붙는다 (2026-07-31 요청).
+       .section-head를 쓰지 않는 이유는 view-library.js의 주석 참조. */
+    .lib-head{
+      display:flex;align-items:center;gap:var(--space-4);
+      padding:var(--space-10) var(--space-12) var(--space-6);
+    }
+    .lib-head-title{
+      flex:1;min-width:0;text-align:center;
+      font-size:var(--type-headline2-size);font-weight:var(--weight-bold-text);
+      color:var(--semantic-label-normal);
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    }
+
+    /* ☰ 시트 — 왼쪽 «신조와 고백», 오른쪽 «목차» 2단 (2026-07-31 요청).
+       ★ max-height를 명시해야 한다. .sheet-body의 높이는 flex로 «제한»될 뿐
+         definite height가 아니라서, 자식에 overflow-y만 걸면 내용만큼 늘어나
+         결국 시트 전체가 스크롤된다 — 하려던 것의 정반대가 된다. */
+    .nav-sheet{
+      display:grid;grid-template-columns:minmax(92px,36%) 1fr;
+      gap:var(--space-12);max-height:66dvh;
+    }
+    /* min-height:0 이 없으면 grid 자식의 기본 min-height:auto 때문에
+       역시 줄어들지 않아 각 단이 따로 스크롤되지 않는다. */
+    .nav-col{display:flex;flex-direction:column;min-height:0}
+    .nav-col-body{overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch}
+    .nav-sheet .nav-sec-title{
+      position:sticky;top:0;z-index:1;margin:0 0 6px;padding-bottom:4px;
+      /* 배경이 없으면 스크롤되는 내용이 제목 뒤로 비쳐 지나간다 */
+      background:var(--semantic-background-elevated-normal);
+    }
+    .nav-sheet .nav-doc{font-size:var(--type-caption1-size);word-break:keep-all;padding:10px}
+    /* 2단에서는 목차 오른쪽 폭이 절반 이하로 줄어든다. 한 줄 말줄임으로 두면
+       미리보기가 10자쯤에서 잘려 목차 구실을 못 한다 → 2줄까지 허용한다. */
+    .nav-sheet .nav-toc{align-items:flex-start;min-height:44px;padding:10px 8px}
+    .nav-sheet .nav-toc-no{min-width:34px}
+    .nav-sheet .nav-toc-sub{
+      white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+      overflow:hidden;word-break:keep-all;line-height:1.35;
+    }
+
     .nav-sec-title{margin:14px 0 6px;font-size:var(--type-caption1-size);font-weight:var(--weight-bold-text);color:var(--semantic-label-assistive)}
     .nav-sec-title:first-child{margin-top:0}
     .sheet-group{margin:10px 0 4px;font-size:var(--type-caption2-size);color:var(--semantic-label-assistive)}
