@@ -317,6 +317,27 @@ check('★ 화면 전환(hidden)을 CSS가 무력화하지 않는다', () => {
   return missing.length === 0 || 'index.html에 없는 화면: ' + missing.join(', ');
 });
 
+check('★ 인앱 브라우저 안내가 화면과 코드에 모두 있다', () => {
+  // 카카오톡 인앱 브라우저에서는 구글 로그인 창을 다녀오는 사이 페이지가 다시
+  // 읽혀 로그인이 풀린다. 안내가 빠지면 사용자는 «로그인이 안 된다»만 겪는다
+  // (2026-07-31 실사용 신고의 실제 원인).
+  const html = read(path.join(WEB, 'index.html'));
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+
+  const ids = ['inapp-banner', 'inapp-open', 'inapp-copy'];
+  const missing = ids.filter((id) => !html.includes('id="' + id + '"'));
+  if (missing.length) return 'index.html에 없는 요소: ' + missing.join(', ');
+
+  // 기본은 숨김이어야 한다 — 일반 브라우저에서 경고가 뜨면 안 된다
+  if (!/id="inapp-banner"[^>]*\shidden/.test(html)) {
+    return '#inapp-banner가 기본 hidden이 아니다 — 일반 브라우저에도 경고가 뜬다';
+  }
+
+  const fns = ['detectInApp', 'externalOpenUrl', 'setupInAppBanner'];
+  const notUsed = fns.filter((f) => !app.includes(f));
+  return notUsed.length === 0 || 'app.js가 쓰지 않는 함수: ' + notUsed.join(', ');
+});
+
 check('★ 메뉴(#nav)가 본문(#view)보다 앞에 있다', () => {
   // .topnav는 제목줄 바로 아래에 붙도록 만든 스타일이라, 마크업에서 본문 뒤에
   // 두면 화면 맨 아래에 깔린다. 그러면 탭이 보이지 않아 다른 화면으로 갈
