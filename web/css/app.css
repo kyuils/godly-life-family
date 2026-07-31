@@ -443,7 +443,12 @@
     /* ====== REGISTER (자가 등록) ====== */
     .register{flex:1;display:flex;flex-direction:column;padding:var(--space-32) var(--space-20) calc(env(safe-area-inset-bottom) + var(--space-24))}
     .register-hero{text-align:center;margin-bottom:var(--space-20)}
-    .register-hero h1{font-size:var(--type-heading1-size);line-height:var(--type-heading1-line);letter-spacing:var(--type-heading1-tracking);font-weight:var(--weight-bold-display);margin:0}
+    /* ★ .cover-title은 «검은 표지 박스» 안에서 쓰라고 만든 흰색 글자다(color:#FAF9F5).
+         가입 화면은 밝은 크림 배경이라 그대로 두면 «처음 오셨네요»가 배경에 묻혀
+         제목이 통째로 사라진다. 이 화면은 신규 가입자가 반드시 지나는 유일한 길이라
+         조용히 깨지면 «뭘 하라는 건지 모르겠는 화면»이 된다 (2026-07-31 발견).
+         색은 여기서 되돌린다 — .cover-title 자체를 고치면 로그인 표지가 깨진다. */
+    .register-hero h1{font-size:var(--type-heading1-size);line-height:var(--type-heading1-line);letter-spacing:var(--type-heading1-tracking);font-weight:var(--weight-bold-display);margin:0;color:var(--semantic-label-normal)}
     .register-sub{color:var(--semantic-label-alternative);margin:var(--space-6) 0 0;font-size:var(--type-body2-size)}
     .register-account{display:inline-flex;flex-direction:column;gap:2px;align-items:center;margin-top:var(--space-14);padding:var(--space-8) var(--space-16);border-radius:var(--radius-lg);background:var(--semantic-fill-normal);max-width:100%}
     .register-account .ra-label{font-size:var(--type-caption1-size);color:var(--semantic-label-alternative);font-weight:var(--weight-bold-text);letter-spacing:0.03em}
