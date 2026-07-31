@@ -112,9 +112,12 @@ async function renderDoc(root, id) {
   const filtered = query ? items.filter(function (it) { return matches(it, query); }) : items;
 
   root.innerHTML =
-    '<div class="section-head">' +
+    // ★ .section-head를 쓰지 않는다. 그 class는 달력·우리반·기도 화면이 함께 쓰는
+    //   «작은 회색 머리글»이라, 여기서 flex 배치를 주면 세 화면이 같이 바뀐다.
+    //   자료 화면만 «‹ 제목 ☰» 세 칸 배치가 필요하므로 전용 class를 둔다.
+    '<div class="lib-head">' +
       '<button class="icon-btn" id="lib-back" aria-label="목록으로">‹</button>' +
-      '<span>' + escapeHtml(doc.shortTitle || doc.title) + '</span>' +
+      '<span class="lib-head-title">' + escapeHtml(doc.shortTitle || doc.title) + '</span>' +
       '<button class="icon-btn" id="lib-menu" aria-label="다른 자료·목차">☰</button>' +
     '</div>' +
     '<input class="form-input" id="lib-q" type="search" placeholder="이 문서에서 검색" value="' + escapeHtml(query) + '">' +
@@ -144,7 +147,13 @@ async function renderDoc(root, id) {
  *
  * 왜 필요한가: 예전에는 자료를 보다가 다른 자료로 가려면 목록까지 되돌아
  * 나와야 했다(2026-07-31 요청: "다른 자료는 다시 되돌아 나와서 봐야 해서 불편해").
- * 휴대폰 폭에서는 좌우 2단이 양쪽 다 좁아지므로 위아래 1단으로 둔다.
+ *
+ * ★ 배치가 좌우 2단이다 (2026-07-31 2차 요청 — 사용자가 원하는 형태를 사진으로 지정).
+ *   처음에는 «휴대폰 폭에서 양쪽 다 좁아진다»는 이유로 위아래 1단이었다.
+ *
+ * ★ 두 단을 각각 <div>로 감싸는 것이 필수다. 지금처럼 제목·버튼이 평면으로
+ *   나열된 상태에서 부모에 grid를 걸면 **그 전부가 좌·우로 번갈아 꽂힌다**
+ *   (문서 버튼이 양쪽에 섞인다). 배치만 바꾸면 되는 일이 아니다.
  */
 function openNavSheet(root, doc) {
   const others = groupsWithDocs().map(function (x) {
@@ -174,9 +183,14 @@ function openNavSheet(root, doc) {
 
   openSheet(doc.shortTitle || doc.title, '다른 자료로 바로 갈 수 있어요',
     '<div class="nav-sheet">' +
-      '<div class="nav-sec-title">신조와 고백</div>' + others +
-      '<div class="nav-sec-title">목차</div>' +
-      '<div class="nav-toc-list">' + toc + '</div>' +
+      '<div class="nav-col">' +
+        '<div class="nav-sec-title">신조와 고백</div>' +
+        '<div class="nav-col-body">' + others + '</div>' +
+      '</div>' +
+      '<div class="nav-col">' +
+        '<div class="nav-sec-title">목차</div>' +
+        '<div class="nav-col-body"><div class="nav-toc-list">' + toc + '</div></div>' +
+      '</div>' +
     '</div>');
 
   document.querySelectorAll('[data-goto-doc]').forEach(function (b) {
