@@ -5,7 +5,7 @@
 //
 // 실패 시 exit 1. 통과 시 exit 0 + "ALL TESTS PASSED".
 
-import { createHarness, NAMES, ALL_GAS_FILES } from './gas-harness.mjs';
+import { createHarness, NAMES, HEADERS, ALL_GAS_FILES } from './gas-harness.mjs';
 import { readFileSync } from 'node:fs';
 
 let pass = 0;
@@ -36,6 +36,7 @@ const STUDENT = 'student1@example.com';
 const PARENT = 'parent1@example.com';
 const TEACHER = 'teacher@example.com';
 const OTHER = 'student2@example.com';
+const MEMBER = 'member1@example.com';   // 혜림교회 성도 (v1.2)
 
 function seedBase(extra = {}) {
   return Object.assign({
@@ -45,6 +46,9 @@ function seedBase(extra = {}) {
     ],
     parents: [
       { email: PARENT, 이름: '박학부모', 자녀이름: '김학생', active: 'TRUE', 가입시각: '2026-01-20', 가입경로: 'self' },
+    ],
+    members: [
+      { email: MEMBER, 이름: '최성도', 소속전도회: '한나전도회', active: 'TRUE', 가입시각: '2026-03-01', 가입경로: 'self' },
     ],
     teachers: [
       { email: TEACHER, 이름: '황교사', 역할: 'admin', active: 'TRUE', 가입시각: '2026-01-01' },
@@ -720,6 +724,253 @@ section('Setup.gs (비개발자가 직접 실행하는 파일)');
     return /HEADERS\.MEMBERS_STUDENT/.test(src) || 'Sheet.gs의 HEADERS를 쓰지 않음';
   });
 }
+
+// ===========================================================================
+section('★ 가입 3분류 — 성도(member) (v1.2)');
+// ===========================================================================
+//
+// 성도는 «우리반»이 아니다. 날주·달력·자료만 쓰고 기도 요청은 쓸 수 없다(계약 §2.2b).
+// 여기서 보는 것은 «권한이 새지 않는가»와 «데이터가 위조되지 않는가»이다.
+{
+  const h = createHarness(seedBase());
+  const TODAY = h.todayStr();
+
+  t('성도가 로그인하면 kind/role이 member다', () => {
+    const r = h.callAction({ action: 'whoami', idToken: tok(MEMBER) });
+    if (!r.ok) return JSON.stringify(r);
+    return eq(r.kind, 'member', 'kind') || eq(r.role, 'member', 'role') ||
+      eq(r.extra, '한나전도회', 'extra');
+  });
+
+  t('★ 성도는 교사 전용 액션 3개에 전부 forbidden', () => {
+    const acts = ['getMembers', 'getAllRecords', 'getAllPrayers'];
+    const bad = acts.filter((a) => h.callAction({ action: a, idToken: tok(MEMBER) }).code !== 'forbidden');
+    return bad.length === 0 || '통과해버린 액션: ' + bad.join(', ');
+  });
+
+  t('★ 성도는 기도 액션 4개에 전부 forbidden', () => {
+    const calls = [
+      { action: 'getMyPrayers' },
+      { action: 'addPrayer', text: '기도제목' },
+      { action: 'setPrayerAnswered', id: 'x', answered: true },
+      { action: 'deletePrayer', id: 'x' },
+    ];
+    const bad = calls
+      .map((c) => Object.assign({ idToken: tok(MEMBER) }, c))
+      .filter((c) => h.callAction(c).code !== 'forbidden')
+      .map((c) => c.action);
+    return bad.length === 0 || '통과해버린 액션: ' + bad.join(', ');
+  });
+
+  t('성도도 날주는 쓸 수 있다 (getMyRecords / setRecord)', () => {
+    const g = h.callAction({ action: 'getMyRecords', idToken: tok(MEMBER), months: [TODAY.slice(0, 7)] });
+    if (!g.ok) return 'getMyRecords: ' + JSON.stringify(g);
+    const w = h.callAction({
+      action: 'setRecord', idToken: tok(MEMBER),
+      date: TODAY, wordRead: true, verse: '', resolution: '', intercession: false,
+    });
+    return w.ok ? true : 'setRecord: ' + JSON.stringify(w);
+  });
+}
+
+{
+  const h = createHarness(seedBase());
+  const TODAY = h.todayStr();
+  h.callAction({
+    action: 'setRecord', idToken: tok(MEMBER),
+    date: TODAY, wordRead: true, verse: '', resolution: '', intercession: false,
+  });
+
+  t('★ 성도의 기록은 구분이 «성도»로 남는다 (학생으로 위조되지 않음)', () => {
+    const sh = h.sheet('RECORDS_' + TODAY.slice(0, 7));
+    const headers = sh.data[0];
+    const iEmail = headers.indexOf('email');
+    const iKind = headers.indexOf('구분');
+    const rows = sh.data.slice(1).filter((r) => String(r[iEmail]).toLowerCase() === MEMBER);
+    if (!rows.length) return '성도 기록 행이 없다';
+    return eq(String(rows[0][iKind]), '성도', '구분');
+  });
+
+  t('★ 교사의 «우리반»에 성도가 나타나지 않는다', () => {
+    const recs = h.callAction({ action: 'getAllRecords', idToken: tok(TEACHER), days: 60 });
+    if (!recs.ok) return JSON.stringify(recs);
+    const leaked = recs.rows.filter((r) => String(r.email).toLowerCase() === MEMBER);
+    if (leaked.length) return 'getAllRecords에 성도 기록이 ' + leaked.length + '건 섞였다';
+
+    const mem = h.callAction({ action: 'getMembers', idToken: tok(TEACHER) });
+    if (!mem.ok) return JSON.stringify(mem);
+    const inList = mem.members.filter((m) => String(m.email).toLowerCase() === MEMBER);
+    return inList.length === 0 || 'getMembers에 성도가 들어 있다';
+  });
+
+  t('★ getMembers 응답에 학교가 들어 있지 않다 (시트에만 둔다)', () => {
+    const r = h.callAction({ action: 'getMembers', idToken: tok(TEACHER) });
+    if (!r.ok) return JSON.stringify(r);
+    return /"school"|학교/.test(JSON.stringify(r)) ? '응답에 학교가 있다' : true;
+  });
+}
+
+{
+  t('★ 성도 email이 학생으로 재가입할 수 없다 (already_registered)', () => {
+    const h = createHarness(seedBase({ registerCode: 'hyerim2026' }));
+    const r = h.callAction({
+      action: 'register', idToken: tok(MEMBER),
+      kind: 'student', name: '최성도', extra: '중1-1', code: 'hyerim2026',
+    });
+    return eq(r.code, 'already_registered');
+  });
+
+  t('★ register(kind:member)로 성도 명부에 등재된다', () => {
+    const h = createHarness(seedBase({ registerCode: 'hyerim2026' }));
+    const before = h.sheet('MEMBERS_성도').data.length;
+    const r = h.callAction({
+      action: 'register', idToken: tok('newmember@example.com'),
+      kind: 'member', name: '새성도', extra: '드보라전도회', code: 'hyerim2026',
+    });
+    if (!r.ok) return JSON.stringify(r);
+    const data = h.sheet('MEMBERS_성도').data;
+    if (data.length !== before + 1) return '행 수 ' + before + ' → ' + data.length;
+    return eq(String(data[data.length - 1][data[0].indexOf('소속전도회')]), '드보라전도회', '소속전도회');
+  });
+
+  t('★ register(kind:teacher)는 여전히 거부된다 (보안 불변식 3)', () => {
+    const h = createHarness(seedBase({ registerCode: 'hyerim2026' }));
+    const before = h.sheet('MEMBERS_교사').data.length;
+    const r = h.callAction({
+      action: 'register', idToken: tok('evil@example.com'),
+      kind: 'teacher', name: '가짜교사', extra: '', code: 'hyerim2026',
+    });
+    if (r.code !== 'bad_request') return 'code=' + r.code;
+    return eq(h.sheet('MEMBERS_교사').data.length, before, '교사 행 수');
+  });
+
+  t('★ 학생 가입 시 학교가 «올바른 열»에 저장된다', () => {
+    const h = createHarness(seedBase({ registerCode: 'hyerim2026' }));
+    const r = h.callAction({
+      action: 'register', idToken: tok('newstudent@example.com'),
+      kind: 'student', name: '새학생', extra: '중1-3', school: '혜림중학교', code: 'hyerim2026',
+    });
+    if (!r.ok) return JSON.stringify(r);
+    const data = h.sheet('MEMBERS_학생').data;
+    const headers = data[0];
+    const row = data[data.length - 1];
+    if (headers.indexOf('학교') < 0) return '학교 열이 없다';
+    return eq(String(row[headers.indexOf('학교')]), '혜림중학교', '학교') ||
+      eq(String(row[headers.indexOf('학년반')]), '중1-3', '학년반') ||
+      eq(String(row[headers.indexOf('active')]), 'TRUE', 'active');
+  });
+
+  t('★ 학부모·성도가 school을 보내도 어디에도 저장되지 않는다', () => {
+    const h = createHarness(seedBase({ registerCode: 'hyerim2026' }));
+    h.callAction({
+      action: 'register', idToken: tok('p2@example.com'),
+      kind: 'parent', name: '학부모2', extra: '김학생', school: '몰래학교', code: 'hyerim2026',
+    });
+    h.callAction({
+      action: 'register', idToken: tok('m2@example.com'),
+      kind: 'member', name: '성도2', extra: '한나전도회', school: '몰래학교', code: 'hyerim2026',
+    });
+    const blob = JSON.stringify(h.sheet('MEMBERS_학부모').data) +
+      JSON.stringify(h.sheet('MEMBERS_성도').data);
+    return blob.indexOf('몰래학교') < 0 || '시트에 school 값이 새어 들어갔다';
+  });
+
+  t('★ 구 헤더(학교 열 없음)에 학생 가입 → server_misconfig (조용한 누락 금지)', () => {
+    const h = createHarness(seedBase({ registerCode: 'hyerim2026' }));
+    // setupAll을 아직 실행하지 않은 상태를 재현한다 — 헤더에서 «학교»만 뗀다.
+    const sh = h.sheet('MEMBERS_학생');
+    const i = sh.data[0].indexOf('학교');
+    sh.data.forEach((row) => row.splice(i, 1));
+    const r = h.callAction({
+      action: 'register', idToken: tok('newstudent2@example.com'),
+      kind: 'student', name: '새학생2', extra: '중2-2', school: '혜림중학교', code: 'hyerim2026',
+    });
+    return eq(r.code, 'server_misconfig');
+  });
+
+  t('★ 학교·소속전도회에도 수식 인젝션 방어가 걸린다 (불변식 5)', () => {
+    const h = createHarness(seedBase({ registerCode: 'hyerim2026' }));
+    h.callAction({
+      action: 'register', idToken: tok('s9@example.com'),
+      kind: 'student', name: '학생9', extra: '중3-1', school: '=SUM(A1)', code: 'hyerim2026',
+    });
+    h.callAction({
+      action: 'register', idToken: tok('m9@example.com'),
+      kind: 'member', name: '성도9', extra: '=SUM(A1)', code: 'hyerim2026',
+    });
+    const st = h.sheet('MEMBERS_학생').data;
+    const mb = h.sheet('MEMBERS_성도').data;
+    const school = String(st[st.length - 1][st[0].indexOf('학교')]);
+    const group = String(mb[mb.length - 1][mb[0].indexOf('소속전도회')]);
+    if (school.charAt(0) !== String.fromCharCode(39)) return '학교: ' + school;
+    if (group.charAt(0) !== String.fromCharCode(39)) return '소속전도회: ' + group;
+    return true;
+  });
+}
+
+{
+  t('★ 우선순위 전수 — 교사 › 학부모 › 학생 › 성도', () => {
+    const dup = (email) => [{ email: email, 이름: '겹침', 소속전도회: 'x', active: 'TRUE', 가입시각: '2026-03-01', 가입경로: 'self' }];
+    const cases = [
+      { label: '성도+교사', email: TEACHER, want: 'teacher' },
+      { label: '학부모+성도', email: PARENT, want: 'parent' },
+      { label: '학생+성도', email: STUDENT, want: 'student' },
+    ];
+    const bad = [];
+    cases.forEach((c) => {
+      const h = createHarness(seedBase({ members: dup(c.email) }));
+      const r = h.callAction({ action: 'whoami', idToken: tok(c.email) });
+      if (!r.ok || r.kind !== c.want) bad.push(c.label + '→' + (r.kind || r.code));
+    });
+    return bad.length === 0 || bad.join(', ');
+  });
+
+  t('★ 비활성 성도는 unauthorized (활성 행만 후보)', () => {
+    const h = createHarness(seedBase({
+      members: [{ email: MEMBER, 이름: '최성도', 소속전도회: '한나전도회', active: 'FALSE', 가입시각: '2026-03-01', 가입경로: 'self' }],
+    }));
+    return eq(h.callAction({ action: 'whoami', idToken: tok(MEMBER) }).code, 'unauthorized');
+  });
+}
+
+{
+  t('★ 하네스 스키마가 Sheet.gs와 어긋나지 않는다 (양방향 키 비교)', () => {
+    // 하네스는 Sheet.gs의 스키마를 «사본»으로 들고 있다. 갈라지면 테스트가
+    // 실제와 다른 스키마 위에서 통과해 버린다 — 그러면 검증이 무의미해진다.
+    // const로 선언한 값은 vm 컨텍스트에 노출되지 않으므로 소스에서 직접 읽는다.
+    const src = readFileSync(new URL('../gas/Sheet.gs', import.meta.url), 'utf8');
+    const literal = (name) => {
+      const m = new RegExp('const ' + name + ' = (\\{[\\s\\S]*?\\n\\});').exec(src);
+      if (!m) return null;
+      return new Function('return (' + m[1] + ')')();
+    };
+    const gasHeaders = literal('HEADERS');
+    const gasNames = literal('SHEET_NAMES');
+    if (!gasHeaders || !gasNames) return 'Sheet.gs에서 HEADERS/SHEET_NAMES를 읽지 못했다';
+    const problems = [];
+
+    const kA = Object.keys(HEADERS).sort();
+    const kB = Object.keys(gasHeaders).sort();
+    if (kA.join(',') !== kB.join(',')) {
+      problems.push('HEADERS 키: harness[' + kA.join(',') + '] vs gas[' + kB.join(',') + ']');
+    }
+    kA.filter((k) => kB.indexOf(k) >= 0).forEach((k) => {
+      if (HEADERS[k].join('|') !== gasHeaders[k].join('|')) problems.push('HEADERS.' + k + ' 값 불일치');
+    });
+
+    const nA = Object.keys(NAMES).sort();
+    const nB = Object.keys(gasNames).sort();
+    if (nA.join(',') !== nB.join(',')) {
+      problems.push('SHEET_NAMES 키: harness[' + nA.join(',') + '] vs gas[' + nB.join(',') + ']');
+    }
+    nA.filter((k) => nB.indexOf(k) >= 0).forEach((k) => {
+      if (NAMES[k] !== gasNames[k]) problems.push('SHEET_NAMES.' + k + ' 값 불일치');
+    });
+
+    return problems.length === 0 || problems.join(' / ');
+  });
+}
+
 
 // ===========================================================================
 section('파일 평가 순서 무관성');

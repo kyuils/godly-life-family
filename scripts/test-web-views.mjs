@@ -349,6 +349,54 @@ await t('★ 기록 로드 실패는 «0건»이 아니라 {ok:false}를 돌려�
   } finally { globalThis.fetch = realFetch; }
 });
 
+await t('★ 성도(member)는 기도를 아예 부르지 않고 진입한다', async () => {
+  // 성도는 기도 요청 기능이 없다(계약 §2.2b). 서버가 그 액션을 forbidden으로
+  // 막으므로, load.js가 그대로 호출하면 **로그인 직후 로드가 실패해 성도가
+  // 앱에 못 들어간다.** «실패를 빈 데이터로 갈음하지 않는다» 규칙 때문에
+  // 우회도 불가능하다. 그래서 «처음부터 부르지 않는다»가 유일한 해법이다.
+  const today = todayStr();
+  setupLoad('member@example.com');
+  state.session.kind = 'member';
+  state.session.role = 'member';
+
+  const called = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    const b = JSON.parse(opts.body);
+    called.push(b.action);
+    if (b.action === 'getMyPrayers') {
+      // 서버가 실제로 하는 응답. 호출하면 로드가 실패해야 정상이다.
+      return { ok: true, json: async () => ({ ok: false, code: 'forbidden' }) };
+    }
+    return { ok: true, json: async () => ({ ok: true, rows: [] }) };
+  };
+  try {
+    const r = await loadMyData(today);
+    if (called.indexOf('getMyPrayers') >= 0) {
+      return '★ 성도인데 getMyPrayers를 불렀다 — 배포되면 성도가 로그인하지 못한다';
+    }
+    if (!r.ok) return '진입 실패: ' + JSON.stringify(r);
+    return Array.isArray(state.prayers) && state.prayers.length === 0
+      ? true : 'prayers=' + JSON.stringify(state.prayers);
+  } finally { globalThis.fetch = realFetch; }
+});
+
+await t('학생·학부모는 여전히 기도를 부른다 (성도 예외가 과하게 적용되지 않는다)', async () => {
+  const today = todayStr();
+  setupLoad('student@example.com');   // setupLoad가 kind='student'로 둔다
+  const called = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts) => {
+    called.push(JSON.parse(opts.body).action);
+    return { ok: true, json: async () => ({ ok: true, rows: [] }) };
+  };
+  try {
+    const r = await loadMyData(today);
+    if (!r.ok) return '진입 실패: ' + JSON.stringify(r);
+    return called.indexOf('getMyPrayers') >= 0 || '학생인데 기도를 부르지 않았다';
+  } finally { globalThis.fetch = realFetch; }
+});
+
 await t('★ 기도만 실패해도 {ok:false}를 돌려준다 (빈 목록으로 갈음 금지)', async () => {
   const today = todayStr();
   setupLoad('failpray@example.com');

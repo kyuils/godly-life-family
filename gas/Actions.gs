@@ -156,6 +156,9 @@ function findAnyMemberRow_(lowerEmail) {
     { name: SHEET_NAMES.MEMBERS_TEACHER, kind: 'teacher' },
     { name: SHEET_NAMES.MEMBERS_PARENT, kind: 'parent' },
     { name: SHEET_NAMES.MEMBERS_STUDENT, kind: 'student' },
+    // 성도 시트를 빠뜨리면 성도가 학생으로 **재가입**할 수 있고, 한 사람이 두 명부에
+    // 존재하게 된다. 계약 §2.4는 그 상태를 «수기 편집으로만 도달 가능»이라고 못박았다.
+    { name: SHEET_NAMES.MEMBERS_MEMBER, kind: 'member' },
   ];
   let inactiveHit = null;
   for (let i = 0; i < sheets.length; i++) {
@@ -177,8 +180,10 @@ function handleRegister(body) {
   // 1) kind 검증 — teacher는 어떤 경우에도 거부한다.
   //    교사 권한은 MEMBERS_교사 시트를 사람이 직접 편집해야만 부여된다 (보안 불변식 3).
   const kind = body && body.kind;
-  if (kind !== 'student' && kind !== 'parent') {
-    return { ok: false, code: 'bad_request', message: 'kind must be student or parent' };
+  // member(성도)는 v1.2에서 추가됐다. teacher는 여전히 어떤 경우에도 거부한다 —
+  // 교사 권한은 MEMBERS_교사 시트를 사람이 직접 편집해야만 부여된다(보안 불변식 3).
+  if (kind !== 'student' && kind !== 'parent' && kind !== 'member') {
+    return { ok: false, code: 'bad_request', message: 'kind must be student, parent or member' };
   }
 
   // 2) 이름/extra 검증 (백오프 카운터와 무관 — 코드 추측 시도가 아니므로)
@@ -189,6 +194,11 @@ function handleRegister(body) {
   const extra = cleanText_(body && body.extra, false);
   if (codePointLength_(extra) > MAX_EXTRA_LEN) {
     return { ok: false, code: 'bad_request', message: 'extra too long' };
+  }
+  // 학교는 학생만 저장한다. 다른 kind가 보내면 여기서 버린다 (계약 §4.2).
+  const school = kind === 'student' ? cleanText_(body && body.school, false) : '';
+  if (codePointLength_(school) > MAX_EXTRA_LEN) {
+    return { ok: false, code: 'bad_request', message: 'school too long' };
   }
 
   // 3) 백오프 2단 — email 단위만 두면 계정을 바꿔가며 무제한 시도할 수 있다 (계약 §4.2).
@@ -214,12 +224,30 @@ function handleRegister(body) {
     if (hit.found && hit.active) return { ok: false, code: 'already_registered' };
     if (hit.found && !hit.active) return { ok: false, code: 'deactivated' };
 
-    const sheetName = kind === 'parent' ? SHEET_NAMES.MEMBERS_PARENT : SHEET_NAMES.MEMBERS_STUDENT;
-    const headerKey = kind === 'parent' ? 'MEMBERS_PARENT' : 'MEMBERS_STUDENT';
-    const extraHeader = kind === 'parent' ? '자녀이름' : '학년반';
+    const ROUTE = {
+      student: { name: SHEET_NAMES.MEMBERS_STUDENT, headerKey: 'MEMBERS_STUDENT', extraHeader: '학년반' },
+      parent: { name: SHEET_NAMES.MEMBERS_PARENT, headerKey: 'MEMBERS_PARENT', extraHeader: '자녀이름' },
+      member: { name: SHEET_NAMES.MEMBERS_MEMBER, headerKey: 'MEMBERS_MEMBER', extraHeader: '소속전도회' },
+    };
+    const route = ROUTE[kind];
+    const sheetName = route.name;
+    const extraHeader = route.extraHeader;
 
-    const sh = ensureSheet_(sheetName, HEADERS[headerKey]);
+    const sh = ensureSheet_(sheetName, HEADERS[route.headerKey]);
     const headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(String);
+
+    // ★ 헤더 누락 방어 (계약 §4.3).
+    //   ensureSheet_는 **기존 시트의 헤더를 고치지 않는다.** 그래서 setupAll을 아직
+    //   실행하지 않은 상태로 새 필드를 받으면, rowFromObj_가 그 키를 말없이 버리고
+    //   가입은 ok:true로 성공한다. 사용자도 교사도 누락을 모른다.
+    //   조용히 버리느니 명시적으로 실패한다.
+    const required = [extraHeader].concat(kind === 'student' ? ['학교'] : []);
+    const missing = required.filter(function (h) { return headers.indexOf(h) < 0; });
+    if (missing.length) {
+      console.log('[register] 시트 열 누락: ' + sheetName + ' → ' + missing.join(', ') +
+        ' (Apps Script에서 setupAll을 실행하세요)');
+      return { ok: false, code: 'server_misconfig' };
+    }
 
     // 위치 기반 배열이 아니라 헤더 순서에서 만든다 — 사람이 명부에 열을 하나 삽입해도
     // 값이 밀려 들어가지 않는다 (계약 §0, §4.2).
@@ -231,6 +259,7 @@ function handleRegister(body) {
       '가입경로': 'self',
     };
     obj[extraHeader] = sanitizeCell_(extra);
+    if (kind === 'student') obj['학교'] = sanitizeCell_(school);
     appendRow_(sheetName, rowFromObj_(headers, obj));
 
     invalidateMemberCache_(email);
@@ -355,9 +384,24 @@ function newPrayerId_() {
   return 'P' + String(Utilities.getUuid()).replace(/-/g, '').slice(0, 16);
 }
 
+/**
+ * 기도 요청 기능을 쓸 수 있는 구분인가 (계약 §2.2b).
+ *
+ * 성도(member)는 쓸 수 없다. 요구사항 3은 «담임교사에게 요청하는 기도»이고,
+ * 혜림교회 성도 전체의 기도가 담임교사 한 사람에게 모이면 성격이 달라진다.
+ *
+ * ★ 판정은 **명부에서 조회한 kind**(auth.kind)로만 한다. 클라이언트가 보낸 값은
+ *   쓰지 않는다 — 보안 불변식 1. authenticate()가 돌려주는 auth는 전부 시트에서
+ *   읽은 값이다.
+ */
+function canUsePrayers_(auth) {
+  return auth.kind !== 'member';
+}
+
 function handleGetMyPrayers(body) {
   const auth = authenticate(body);
   if (!auth.ok) return auth;
+  if (!canUsePrayers_(auth)) return { ok: false, code: 'forbidden' };
   const rows = readTable_(SHEET_NAMES.PRAYERS).rows
     .filter(function (r) {
       return String(r.email || '').toLowerCase().trim() === auth.email && !isDeletedRow_(r);
@@ -370,6 +414,7 @@ function handleGetMyPrayers(body) {
 function handleAddPrayer(body) {
   const auth = authenticate(body);
   if (!auth.ok) return auth;
+  if (!canUsePrayers_(auth)) return { ok: false, code: 'forbidden' };
 
   const text = cleanText_(body && body.text, true);
   if (!text || codePointLength_(text) > MAX_TEXT_LEN) {
@@ -450,6 +495,7 @@ function updatePrayerRow_(rowIndex, id, changes) {
 function handleSetPrayerAnswered(body) {
   const auth = authenticate(body);
   if (!auth.ok) return auth;
+  if (!canUsePrayers_(auth)) return { ok: false, code: 'forbidden' };
   const id = body && body.id;
   const answered = body && body.answered === true;
 
@@ -466,6 +512,7 @@ function handleSetPrayerAnswered(body) {
 function handleDeletePrayer(body) {
   const auth = authenticate(body);
   if (!auth.ok) return auth;
+  if (!canUsePrayers_(auth)) return { ok: false, code: 'forbidden' };
   const id = body && body.id;
 
   return withLock_(function () {
@@ -500,6 +547,9 @@ function handleGetAllRecords(body) {
   for (let i = 0; i < months.length; i++) {
     const t = readTable_(recordsSheetName_(months[i]));
     for (let j = 0; j < t.rows.length; j++) {
+      // 성도는 «우리반»이 아니다 (계약 §2.2b). 교사 화면에 섞이지 않도록 여기서 거른다.
+      // 이 규칙이 §2.7·§4.5의 100명 용량 전제를 유지시킨다.
+      if (String(t.rows[j]['구분'] || '') === kindLabel_('member')) continue;
       const d = formatDate_(t.rows[j]['날짜']);
       if (d >= from && d <= today) rows.push(rowToAllRecord_(t.rows[j]));
     }

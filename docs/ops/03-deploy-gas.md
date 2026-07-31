@@ -72,7 +72,7 @@ const SETUP_REGISTER_CODE = '여기에 직접 정한 가입 코드';  // 학생�
    - **허용**
 4. 아래 실행 로그에 **`SETUP COMPLETE`** 가 나오면 성공입니다.
 
-이제 스프레드시트를 열어보면 탭 4개(`MEMBERS_학생`, `MEMBERS_학부모`, `MEMBERS_교사`, `PRAYERS`)가
+이제 스프레드시트를 열어보면 탭 5개(`MEMBERS_학생`, `MEMBERS_학부모`, `MEMBERS_성도`, `MEMBERS_교사`, `PRAYERS`)가
 생겼고, `MEMBERS_교사`에 선생님 계정이 admin으로 등록되어 있습니다.
 
 ## 5. 웹앱으로 배포 ★ (가장 중요)

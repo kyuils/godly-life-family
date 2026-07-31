@@ -54,3 +54,20 @@ export function stale(gen) {
 export function isTeacher() {
   return !!state.session && (state.session.role === 'teacher' || state.session.role === 'admin');
 }
+
+/**
+ * 기도 요청 기능을 쓸 수 있는 사용자인가 (계약 §2.2b).
+ *
+ * 성도(member)는 쓸 수 없다 — 요구사항 3은 «담임교사에게 요청하는 기도»이고,
+ * 성도 전체의 기도가 담임교사 한 사람에게 모이면 그 성격이 달라진다.
+ *
+ * ★ 이 판정은 **화면을 감추기 위한 것일 뿐 보안 경계가 아니다.**
+ *   실제 차단은 서버가 «명부에서 조회한 kind»로 한다(보안 불변식 1).
+ *   여기 값은 서버가 내려준 것이라 신뢰하지만, 조작되더라도 서버가 막는다.
+ *
+ * 세션이 없으면 false — 로그인 전에 기도 화면을 그릴 일이 없다.
+ */
+export function isPrayerUser(session) {
+  const s = session || state.session;
+  return !!s && s.kind !== 'member';
+}

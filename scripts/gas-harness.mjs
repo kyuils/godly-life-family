@@ -27,8 +27,9 @@ const GAS_FILES = ['Sheet.gs', 'Auth.gs', 'Actions.gs', 'Code.gs'];
 export const ALL_GAS_FILES = GAS_FILES.concat(['Setup.gs']);
 
 export const HEADERS = {
-  MEMBERS_STUDENT: ['email', '이름', '학년반', 'active', '가입시각', '가입경로'],
+  MEMBERS_STUDENT: ['email', '이름', '학년반', 'active', '가입시각', '가입경로', '학교'],
   MEMBERS_PARENT: ['email', '이름', '자녀이름', 'active', '가입시각', '가입경로'],
+  MEMBERS_MEMBER: ['email', '이름', '소속전도회', 'active', '가입시각', '가입경로'],
   MEMBERS_TEACHER: ['email', '이름', '역할', 'active', '가입시각'],
   RECORDS: ['날짜', 'email', '이름', '구분', '말씀읽음', '와닿은말씀', '결단', '중보기도', '기록시각', '수정시각'],
   PRAYERS: ['기도ID', '등록일', 'email', '이름', '구분', '기도제목', '상태', '응답일', '수정시각', '삭제여부'],
@@ -37,6 +38,7 @@ export const HEADERS = {
 export const NAMES = {
   MEMBERS_STUDENT: 'MEMBERS_학생',
   MEMBERS_PARENT: 'MEMBERS_학부모',
+  MEMBERS_MEMBER: 'MEMBERS_성도',
   MEMBERS_TEACHER: 'MEMBERS_교사',
   PRAYERS: 'PRAYERS',
 };
@@ -222,6 +224,9 @@ export function createHarness(seed = {}) {
 
   makeSheet(NAMES.MEMBERS_STUDENT, HEADERS.MEMBERS_STUDENT, seed.students);
   makeSheet(NAMES.MEMBERS_PARENT, HEADERS.MEMBERS_PARENT, seed.parents);
+  // 성도 시트는 seed.members가 있을 때만 만든다 — 없으면 «시트 자체가 없는» 상태를
+  // 재현할 수 있어야 하기 때문이다(setupAll 미실행 상황).
+  if (seed.members) makeSheet(NAMES.MEMBERS_MEMBER, HEADERS.MEMBERS_MEMBER, seed.members);
   makeSheet(NAMES.MEMBERS_TEACHER, HEADERS.MEMBERS_TEACHER, seed.teachers);
   if (seed.prayers) makeSheet(NAMES.PRAYERS, HEADERS.PRAYERS, seed.prayers);
 

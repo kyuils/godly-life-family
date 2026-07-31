@@ -63,9 +63,21 @@
 
     <div class="form-row">
       <span class="form-label">저는</span>
-      <div class="part-pills">
-        <button type="button" class="seg-btn" id="reg-kind-student">학생이에요</button>
-        <button type="button" class="seg-btn" id="reg-kind-parent">학부모예요</button>
+      <!-- 분류를 고르면 그 분류에 필요한 칸만 보인다 (2026-07-31 요청:
+           "학부모 가입인데 학교 입력 이런 거 안 뜨게") -->
+      <div class="kind-choices">
+        <button type="button" class="kind-btn" id="reg-kind-student">
+          <span class="kind-title">우리반 학생</span>
+          <span class="kind-desc">황규일 교사반 학생</span>
+        </button>
+        <button type="button" class="kind-btn" id="reg-kind-parent">
+          <span class="kind-title">우리반 학부모</span>
+          <span class="kind-desc">황규일 교사반 학부모</span>
+        </button>
+        <button type="button" class="kind-btn" id="reg-kind-member">
+          <span class="kind-title">혜림교회 성도</span>
+          <span class="kind-desc">성인(만 14세 이상)만 선택해 주세요</span>
+        </button>
       </div>
     </div>
 
@@ -77,6 +89,12 @@
     <div class="form-row">
       <label class="form-label" for="reg-extra" id="reg-extra-label">학년·반 (선택)</label>
       <input class="form-input" id="reg-extra" maxlength="30" placeholder="예: 중2-1">
+    </div>
+
+    <!-- 학교는 학생에게만 보인다. 시트에만 저장하고 어떤 응답에도 넣지 않는다. -->
+    <div class="form-row" id="reg-school-row">
+      <label class="form-label" for="reg-school">학교 (선택)</label>
+      <input class="form-input" id="reg-school" maxlength="30" placeholder="예: 혜림중학교">
     </div>
 
     <div class="form-row">

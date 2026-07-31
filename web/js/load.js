@@ -10,7 +10,7 @@
 // 테스트가 지키게 하기 위함이다 (2026-07-30 7차 검토 지적).
 
 import * as api from './api.js';
-import { state } from './state.js';
+import { state, isPrayerUser } from './state.js';
 import * as S from './stats.js';
 
 /**
@@ -59,10 +59,21 @@ export async function loadMyData(todayStr) {
   // 6개월을 다 쓰고도 더 필요하면 화면에 '+'를 붙인다.
   state.streakCapped = S.streakNeedsMoreMonths(rows, today, months);
 
-  const p = await api.call('getMyPrayers', {}, { noCache: true });
-  // 기도 로드 실패도 «기도 없음»으로 갈음하지 않는다.
-  if (!p.ok) return { ok: false, code: p.code };
-  if (api.getSessionEmail() !== owner) return { ok: false, code: 'stale_session' };
-  state.prayers = p.rows;
+  // ★ 성도(member)는 기도 요청 기능이 없다 (계약 §2.2b).
+  //   서버가 이 액션을 forbidden으로 막으므로, 여기서 그대로 호출하면
+  //   **로그인 직후 로드가 실패해 성도가 앱에 진입하지 못한다.**
+  //   «실패를 빈 데이터로 갈음하지 않는다»는 규칙 때문에 우회할 수도 없다.
+  //   그래서 아예 부르지 않고 빈 목록을 명시한다 — 이것은 «실패를 감추는 것»이
+  //   아니라 «처음부터 없는 기능»이다.
+  //   (2026-07-31 시니어 검토에서 [치명]으로 지적된 경로)
+  if (isPrayerUser(state.session)) {
+    const p = await api.call('getMyPrayers', {}, { noCache: true });
+    // 기도 로드 실패도 «기도 없음»으로 갈음하지 않는다.
+    if (!p.ok) return { ok: false, code: p.code };
+    if (api.getSessionEmail() !== owner) return { ok: false, code: 'stale_session' };
+    state.prayers = p.rows;
+  } else {
+    state.prayers = [];
+  }
   return { ok: true };
 }

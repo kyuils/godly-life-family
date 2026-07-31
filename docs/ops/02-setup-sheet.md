@@ -44,6 +44,7 @@ https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz1234567890/edi
 |---|---|---|
 | `MEMBERS_학생` | 학생 명부 | ✅ 됩니다 |
 | `MEMBERS_학부모` | 학부모 명부 | ✅ 됩니다 |
+| `MEMBERS_성도` | 혜림교회 성도 명부 | ✅ 됩니다 |
 | `MEMBERS_교사` | 교사 명부 | ✅ 됩니다 |
 | `RECORDS_2026-07` 등 | 날짜별 기록 (매달 자동 생성) | ❌ **보기만** |
 | `PRAYERS` | 기도 요청 | ❌ **보기만** |

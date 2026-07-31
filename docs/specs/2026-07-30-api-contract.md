@@ -43,7 +43,7 @@
 
 ### 2.0 사람이 편집해도 되는 시트 (불변식)
 
-> **사람이 직접 편집해도 되는 시트는 `MEMBERS_학생`·`MEMBERS_학부모`·`MEMBERS_교사` 3개뿐이다.**
+> **사람이 직접 편집해도 되는 시트는 `MEMBERS_학생`·`MEMBERS_학부모`·`MEMBERS_성도`·`MEMBERS_교사` 4개뿐이다.** (v1.2)
 > **`RECORDS_*`와 `PRAYERS`는 읽기 전용으로 취급한다 — 정렬·행 삽입·행 삭제·열 이동·열 삽입 금지.**
 > 조회는 반드시 **필터 보기(Filter view)** 로만 한다(일반 필터·정렬은 실제 행 순서를 바꾼다).
 
@@ -55,11 +55,28 @@
 
 ### 2.1 MEMBERS_학생
 
-헤더: `email | 이름 | 학년반 | active | 가입시각 | 가입경로`
+헤더: `email | 이름 | 학년반 | active | 가입시각 | 가입경로 | 학교` (v1.2에서 `학교` 추가)
+
+- **`학교`는 반드시 맨 끝에 둔다.** 중간에 끼우면 `setupAll` 재실행 시 `ensureTab_`이
+  1행 라벨만 덮어써 `active`·`가입시각`·`가입경로` 세 열의 값과 라벨이 어긋난다.
+  그때 `active` 라벨 아래에는 옛 `가입시각` 값이 오는데 `isActive_`는 이를 `true`로 보므로
+  **비활성 처리한 계정이 되살아난다.**
+- `학교`는 시트에만 둔다. **어떤 API 응답에도 넣지 않는다** (§4.2 `getMembers` 참조).
 
 ### 2.2 MEMBERS_학부모
 
 헤더: `email | 이름 | 자녀이름 | active | 가입시각 | 가입경로`
+
+### 2.2b MEMBERS_성도 (v1.2 신설)
+
+헤더: `email | 이름 | 소속전도회 | active | 가입시각 | 가입경로`
+
+- 혜림교회 성도. **우리반(담임교사 관리 대상)이 아니다.**
+- 쓸 수 있는 기능은 **날주·달력·자료뿐이다. 기도 요청은 쓸 수 없다** — 요구사항 3은
+  "담임교사에게 요청하는 기도"이고, 성도 전체(30~100명)의 기도제목이 담임교사 한 사람에게
+  모이면 그 기능의 성격이 달라진다.
+- **교사의 «우리반» 화면·`getMembers`·`getAllRecords`에 나타나지 않는다.**
+  이 결정으로 §2.7·§4.5의 100명 용량 전제가 그대로 유지된다.
 
 ### 2.3 MEMBERS_교사
 
@@ -73,16 +90,17 @@
 `구분`은 **어느 명부 시트에 있는가**로 결정된다. 별도 컬럼으로 두지 않는다 — 시트가 곧 구분이므로
 컬럼과 시트가 어긋나 권한이 잘못 계산되는 부류의 버그를 원천 차단한다.
 
-| 등재된 시트 | kind | role |
-|---|---|---|
-| `MEMBERS_교사` | `teacher` | 시트의 `역할` 열 (`teacher`/`admin`) |
-| `MEMBERS_학부모` | `parent` | `parent` |
-| `MEMBERS_학생` | `student` | `student` |
+| 등재된 시트 | kind | role | 기도 요청 | 우리반 표시 |
+|---|---|---|---|---|
+| `MEMBERS_교사` | `teacher` | 시트의 `역할` 열 (`teacher`/`admin`) | ○ | — |
+| `MEMBERS_학부모` | `parent` | `parent` | ○ | ○ |
+| `MEMBERS_학생` | `student` | `student` | ○ | ○ |
+| `MEMBERS_성도` | `member` | `member` | **✗** | **✗** |
 
 **판정 절차 (순서 고정)**
-1. 세 시트 각각에서 email이 일치하고 **`active`인 행만** 후보로 수집한다.
+1. 네 시트 각각에서 email이 일치하고 **`active`인 행만** 후보로 수집한다.
 2. 후보가 0개면 → `unauthorized`. (비활성 행만 있는 경우도 여기에 해당한다)
-3. 후보 중 우선순위 **교사 › 학부모 › 학생** 최상위를 채택한다.
+3. 후보 중 우선순위 **교사 › 학부모 › 학생 › 성도** 최상위를 채택한다.
 
 - **비활성 행은 우선순위 계산에서 완전히 제외한다.** "교사 시트에 행이 있으면 즉시 teacher" 식으로 구현하면
   해임된(비활성) 교사가 권한을 유지하거나, 반대로 학생 시트에 정상 등재된 사람이 잠긴다. 둘 다 금지다.
@@ -177,6 +195,10 @@ AllPrayer  = Prayer + {email, name, kind}
 ```
 
 - `status`는 와이어에서 `open`/`answered`, 시트에는 `진행중`/`응답됨`으로 쓴다(사람이 읽는 시트 우선).
+- **★ `kind` 값 공간이 둘이다 (v1.2에서 명문화).** 섞으면 화면 필터가 조용히 빈 목록이 된다.
+  - `AllRecord.kind` · `AllPrayer.kind` → 시트 `구분` 열의 **한국어 값** (`학생`/`학부모`/`교사`/`성도`)
+  - `members[].kind` (`getMembers`) → **영문 코드** (`student`/`parent`)
+  - `whoami`/`register` 응답의 `kind` → **영문 코드** (`student`/`parent`/`member`/`teacher`)
 - `joinedAt`은 `YYYY-MM-DD`. 파싱 불가하거나 빈 값이면 `''`를 반환하고, 프론트는 이 경우 달력 하한을
   "가장 오래된 기록의 달"로 대체한다.
 
@@ -206,14 +228,19 @@ AllPrayer  = Prayer + {email, name, kind}
 
 **`register`**
 - 검증 순서: 토큰 검증 → `kind` 검증 → 이름/extra 검증 → 백오프 검사 → 등록 폐쇄 검사 → 코드 대조 → 중복 검사 → append
-- `kind`는 `student`|`parent`만 허용. **`teacher`는 어떤 경우에도 거부**(`bad_request`).
+- `kind`는 `student`|`parent`|`member`만 허용 (v1.2). **`teacher`는 어떤 경우에도 거부**(`bad_request`).
+  `member`를 추가해도 권한이 생기지 않는다 — 교사 권한은 `MEMBERS_교사`를 사람이 직접
+  편집해야만 부여된다(보안 불변식 3).
+- **`school`(v1.2)**: `student`일 때만 저장한다. `parent`·`member`가 보내면 **무시**한다.
+  길이 상한은 `extra`와 같다(≤30자).
 - 코드 비교 정규화: 양쪽 모두 trim + 소문자화 + 내부 공백 제거 후 비교. 불일치 → `bad_code`
 - 백오프 **2단**:
   - email 단위: 10분 창에서 `bad_code` 5회 초과 → `too_many_attempts`
   - **전역 단위(`REG_FAIL_GLOBAL`): 10분 창에서 20회 초과 → 모든 요청 `too_many_attempts`.**
     email 단위만 두면 계정을 바꿔가며 무제한 시도할 수 있다(전역 상한 부재).
 - 이름 검증: trim 후 빈 값 거부, 개행·제어문자 제거, 코드포인트 ≤30자. `extra` ≤30자, 선택.
-- 중복 검사: **세 명부 시트 전부**를 원시 스캔(active 무관, email 대소문자 무시)
+- 중복 검사: **네 명부 시트 전부**를 원시 스캔(active 무관, email 대소문자 무시). v1.2에서
+  `MEMBERS_성도`가 추가됐다 — 빠뜨리면 성도가 학생으로 재가입해 한 사람이 두 명부에 존재한다.
   - 활성 행 존재 → `already_registered` / 비활성 행 존재 → `deactivated` / 없음 → append
   - **스캔→append 전체를 `LockService` 잠금 안에서** 수행
 - 기록 값은 **`rowFromObj_(headers, obj)`로 헤더 순서에서 생성한다**(위치 기반 배열 금지 — §0).
@@ -232,6 +259,10 @@ AllPrayer  = Prayer + {email, name, kind}
 - 서버 캐시 무효화 대상 **없음**(§4.4 — 행 캐시를 두지 않는다). 프론트 `WRITE_INVALIDATES`가 처리한다.
 
 **기도 액션 (`getMyPrayers`/`addPrayer`/`setPrayerAnswered`/`deletePrayer`)**
+- **v1.2 — 성도(`kind='member'`)는 네 액션 모두 `forbidden`이다.**
+  판정은 **명부에서 조회한 kind**로만 한다. 클라이언트가 보낸 값은 쓰지 않는다(보안 불변식 1).
+  프론트도 `web/js/load.js`에서 성도면 `getMyPrayers`를 **호출하지 않는다** — 호출하면
+  로그인 직후 로드가 실패해 성도가 앱에 진입하지 못한다.
 - 소유권 검사: 대상 행의 `email`이 토큰 email과 일치해야 한다.
   **존재하지 않는 id, 남의 id, 삭제된 id는 전부 동일하게 `forbidden`을 반환한다**(존재 여부 유출 방지).
 - `setPrayerAnswered(true)` → `상태='응답됨'`, `응답일`=표준 오늘. `(false)` → `상태='진행중'`, `응답일`=`''`.
@@ -239,6 +270,12 @@ AllPrayer  = Prayer + {email, name, kind}
 
 **`getAllRecords` / `getAllPrayers` / `getMembers`**
 - `isTeacher_(auth)` 통과 필수. 아니면 `forbidden`.
+- **v1.2 — 셋 다 «우리반»만 다룬다. 성도(`member`)는 나타나지 않는다.**
+  - `getMembers`: `MEMBERS_학생`·`MEMBERS_학부모` 2시트만 읽는다(기존 그대로).
+    **`학교`는 응답에 넣지 않는다** — 시트에만 둔다.
+  - `getAllRecords`: 응답에서 `구분`이 `성도`인 행을 제외한다.
+  - `getAllPrayers`: 성도는 애초에 기도를 쓸 수 없으므로 대상이 없다.
+  - 이 규칙이 §2.7·§4.5의 **100명 용량 전제**를 유지시킨다.
 - `getAllRecords`: 표준 오늘 기준 후행 `days`일이 걸치는 **월 시트들만** 읽어 합친다(최대 7개월).
   응답에 `windowDays`를 함께 반환한다 — 프론트는 창을 가득 채운 streak를 **`{windowDays}+`** 로 표기한다
   (본인 화면의 streak과 값이 다를 수 있음을 화면에서 드러내기 위함).
@@ -247,6 +284,12 @@ AllPrayer  = Prayer + {email, name, kind}
 ### 4.3 오류 코드
 
 `unknown_action, server_error, no_token, server_misconfig, invalid_token, tokeninfo_failed,`
+<!-- server_misconfig의 발생 지점은 둘이다 (v1.2에서 추가):
+     ① OAUTH_CLIENT_ID 미설정 (설치 문서 01번)  → 로그 태그 `[auth]`
+     ② 명부 시트에 필수 열 없음 (setupAll 미실행) → 로그 태그 `[register]`
+     사용자에게 보이는 문구는 같지만 조치가 다르므로 서버 로그 태그를 구분한다.
+     분기표는 docs/ops/06-operations.md 참조. -->
+
 `aud_mismatch, iss_mismatch, token_expired, email_unverified, unauthorized, forbidden, bad_request,`
 `busy, conflict,`
 `registration_closed, bad_code, already_registered, deactivated, too_many_attempts`
@@ -485,6 +528,12 @@ cache-first면 코드를 고쳐 배포해도 **`BUILD_TAG`를 올리는 것을 �
 
 ## 9. v1 범위 밖 (명시적 제외)
 
+> v1.2에서 **가입 3분류(학생/학부모/성도)는 범위 «안»으로 들어왔다.** §2.2b·§2.4·§4.2 참조.
+> 다만 아래는 여전히 범위 밖이다.
+
+- 성도의 기도 요청 (사용자 결정 2026-07-31 — 성도는 날주·달력·자료만)
+- 교사 화면의 성도 표시 (사용자 결정 2026-07-31 — 우리반은 학생·학부모만)
+- 가입 시 전화번호 수집 (사용자 결정 2026-07-31 — 전 분류 제외)
 - 학부모–자녀 계정 연결 및 자녀 기록 열람 (사용자 결정 2026-07-30)
 - 교사의 기도 응답 체크 (본인만 — 사용자 결정 2026-07-30)
 - 기도제목 수정(`updatePrayer`)·응답메모 — 요구사항 근거 없음. 오입력은 삭제 후 재등록으로 처리

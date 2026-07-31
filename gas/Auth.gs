@@ -86,7 +86,12 @@ function verifyIdToken(idToken) {
 function kindLabel_(kind) {
   if (kind === 'teacher') return '교사';
   if (kind === 'parent') return '학부모';
-  return '학생';
+  if (kind === 'student') return '학생';
+  if (kind === 'member') return '성도';
+  // ★ 폴백하지 않는다. 예전에는 미지 kind를 '학생'으로 돌려줬는데, 그러면
+  //   새 구분(성도)을 추가했을 때 그 사람의 기록이 시트에 **'학생'으로 위조**되어
+  //   남는다. 조용한 오분류는 조용한 오답을 만든다 (2026-07-31 시니어 검토 지적).
+  throw new Error('unknown kind: ' + kind);
 }
 
 // 한 명부 시트에서 email이 일치하고 active인 행을 찾는다. 없으면 null.
@@ -105,9 +110,9 @@ function findActiveInSheet_(sheetName, lowerEmail) {
  * 명부 조회 (계약 §2.4).
  *
  * 판정 절차 — 순서 고정:
- *   1) 세 시트에서 email 일치 + active 인 행만 후보로 수집
+ *   1) 네 시트에서 email 일치 + active 인 행만 후보로 수집
  *   2) 후보 0개 → null (unauthorized). 비활성 행만 있는 경우도 여기에 해당
- *   3) 우선순위 교사 > 학부모 > 학생 중 최상위 채택
+ *   3) 우선순위 교사 > 학부모 > 학생 > 성도 중 최상위 채택
  *
  * "교사 시트에 행이 있으면 즉시 teacher"로 구현하면 해임된(비활성) 교사가 권한을
  * 유지하거나, 반대로 학생 시트에 정상 등재된 사람이 잠긴다. 둘 다 금지다.
@@ -122,13 +127,18 @@ function lookupMember(email) {
   const cached = safeCacheGet_(cache, cacheKey);
   if (cached) {
     // 미등재 결과도 캐시한다 — 캐시하지 않으면 미등재 사용자의 반복 호출이 매번
-    // 3개 시트 전체 스캔을 유발한다 (계약 §4.4).
+    // 4개 시트 전체 스캔을 유발한다 (계약 §4.4).
     return cached.found ? cached.member : null;
   }
 
+  // 우선순위: 교사 > 학부모 > 학생 > 성도 (계약 §2.4).
+  // 앞 단계에서 찾으면 뒤는 조회하지 않는다 — 읽는 셀 수를 줄이기 위함이다.
   const teacher = findActiveInSheet_(SHEET_NAMES.MEMBERS_TEACHER, lower);
   const parent = teacher ? null : findActiveInSheet_(SHEET_NAMES.MEMBERS_PARENT, lower);
   const student = (teacher || parent) ? null : findActiveInSheet_(SHEET_NAMES.MEMBERS_STUDENT, lower);
+  const churchMember = (teacher || parent || student)
+    ? null
+    : findActiveInSheet_(SHEET_NAMES.MEMBERS_MEMBER, lower);
 
   let member = null;
   if (teacher) {
@@ -157,8 +167,18 @@ function lookupMember(email) {
       name: String(student['이름'] || ''),
       role: 'student',
       kind: 'student',
+      // 학교는 시트에만 둔다 — 어떤 응답에도 넣지 않는다 (계약 §2.1).
       extra: String(student['학년반'] || ''),
       joinedAt: formatDate_(student['가입시각']),
+    };
+  } else if (churchMember) {
+    member = {
+      email: lower,
+      name: String(churchMember['이름'] || ''),
+      role: 'member',
+      kind: 'member',
+      extra: String(churchMember['소속전도회'] || ''),
+      joinedAt: formatDate_(churchMember['가입시각']),
     };
   }
 

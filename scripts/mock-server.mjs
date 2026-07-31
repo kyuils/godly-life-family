@@ -63,6 +63,9 @@ function seed() {
     parents: [
       { email: 'parent1@example.com', '이름': '박은혜', '자녀이름': '김믿음', active: 'TRUE', '가입시각': addDays(today, -90), '가입경로': 'self' },
     ],
+    members: [
+      { email: 'member1@example.com', '이름': '최성도', '소속전도회': '한나전도회', active: 'TRUE', '가입시각': addDays(today, -30), '가입경로': 'self' },
+    ],
     teachers: [
       { email: 'teacher@example.com', '이름': '황교사', '역할': 'admin', active: 'TRUE', '가입시각': addDays(today, -200) },
     ],

@@ -38,7 +38,7 @@ function setupAll() {
 
   setupTabs_();
   protectDataSheets();
-  Logger.log('SETUP COMPLETE — 명부 3개 탭, PRAYERS 탭, Script Properties가 준비되었습니다.');
+  Logger.log('SETUP COMPLETE — 명부 4개 탭(학생·학부모·성도·교사), PRAYERS 탭, Script Properties가 준비되었습니다.');
 }
 
 function setupProperties_() {
@@ -88,6 +88,7 @@ function setupTabs_() {
 
   ensureTab_(ss, SHEET_NAMES.MEMBERS_STUDENT, HEADERS.MEMBERS_STUDENT);
   ensureTab_(ss, SHEET_NAMES.MEMBERS_PARENT, HEADERS.MEMBERS_PARENT);
+  ensureTab_(ss, SHEET_NAMES.MEMBERS_MEMBER, HEADERS.MEMBERS_MEMBER);
   const teacherCreated = ensureTab_(ss, SHEET_NAMES.MEMBERS_TEACHER, HEADERS.MEMBERS_TEACHER);
   ensureTab_(ss, SHEET_NAMES.PRAYERS, HEADERS.PRAYERS);
 

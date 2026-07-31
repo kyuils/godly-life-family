@@ -12,7 +12,7 @@
 //  칸이 생기는 것을 막는다).
 
 import { el, escapeHtml } from './ui.js';
-import { state } from './state.js';
+import { state, isPrayerUser } from './state.js';
 
 const CARDS = [
   { tab: 'today', icon: '📖', title: '날주 체크', desc: '오늘의 맥체인 본문과 결단' },
@@ -21,9 +21,16 @@ const CARDS = [
   { tab: 'library', icon: '📚', title: '신앙 자료', desc: '신앙고백서·요리문답' },
 ];
 
-/** 홈에서 보여 줄 칸 목록 — check-web이 TABS와 대조하는 대상이다. */
+/**
+ * 홈에서 보여 줄 칸 목록.
+ *
+ * ★ CARDS 배열 자체는 4개를 유지하고 **여기서 걸러낸다.**
+ *   성도용 배열을 따로 만들면 check-web의 «tab: 리터럴이 정확히 4개» 검사가
+ *   깨진다. 그 검사는 홈 카드의 목적지가 실제 탭과 이어지는지 보는 장치다.
+ */
 export function homeCards() {
-  return CARDS;
+  // 성도는 기도 요청 기능이 없다 (계약 §2.2b).
+  return CARDS.filter(function (c) { return c.tab !== 'prayer' || isPrayerUser(); });
 }
 
 export function render(root, onPick) {
@@ -32,7 +39,7 @@ export function render(root, onPick) {
     '<div class="home">' +
       (name ? '<div class="home-greet">' + escapeHtml(name) + '님, 오늘도 반갑습니다</div>' : '') +
       '<div class="home-grid">' +
-        CARDS.map(function (c) {
+        homeCards().map(function (c) {
           return (
             '<button class="home-card" data-tab="' + c.tab + '">' +
               '<span class="home-icon">' + c.icon + '</span>' +

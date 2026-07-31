@@ -10,6 +10,7 @@
 const SHEET_NAMES = {
   MEMBERS_STUDENT: 'MEMBERS_학생',
   MEMBERS_PARENT: 'MEMBERS_학부모',
+  MEMBERS_MEMBER: 'MEMBERS_성도',
   MEMBERS_TEACHER: 'MEMBERS_교사',
   PRAYERS: 'PRAYERS',
 };
@@ -17,8 +18,12 @@ const SHEET_NAMES = {
 const RECORDS_PREFIX = 'RECORDS_';
 
 const HEADERS = {
-  MEMBERS_STUDENT: ['email', '이름', '학년반', 'active', '가입시각', '가입경로'],
+  // ★ '학교'는 반드시 맨 끝이다. 중간에 끼우면 setupAll 재실행 시 ensureTab_이
+  //   1행 라벨만 덮어써 active·가입시각·가입경로 세 열이 어긋나고,
+  //   active 자리에 옛 날짜값이 와서 isActive_가 true로 본다 → 비활성 계정 부활.
+  MEMBERS_STUDENT: ['email', '이름', '학년반', 'active', '가입시각', '가입경로', '학교'],
   MEMBERS_PARENT: ['email', '이름', '자녀이름', 'active', '가입시각', '가입경로'],
+  MEMBERS_MEMBER: ['email', '이름', '소속전도회', 'active', '가입시각', '가입경로'],
   MEMBERS_TEACHER: ['email', '이름', '역할', 'active', '가입시각'],
   RECORDS: ['날짜', 'email', '이름', '구분', '말씀읽음', '와닿은말씀', '결단', '중보기도', '기록시각', '수정시각'],
   PRAYERS: ['기도ID', '등록일', 'email', '이름', '구분', '기도제목', '상태', '응답일', '수정시각', '삭제여부'],

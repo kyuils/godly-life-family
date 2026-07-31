@@ -4,7 +4,7 @@
 import { APP_CONFIG } from './config.js';
 import * as api from './api.js';
 import * as auth from './auth.js';
-import { state, resetUserData, isTeacher, bumpGeneration } from './state.js';
+import { state, resetUserData, isTeacher, isPrayerUser, bumpGeneration } from './state.js';
 import * as S from './stats.js';
 import { loadMyData } from './load.js';
 import { el, escapeHtml, toast, closeSheet } from './ui.js';
@@ -144,17 +144,31 @@ async function afterSignIn() {
 // 자가 등록 (요구사항 5·6)
 // ---------------------------------------------------------------------------
 
+/**
+ * 분류별 가입 화면 정의 (2026-07-31 3분류 확대).
+ *
+ * 한 곳에 모아 두는 이유: 라벨·placeholder·보이는 칸이 코드 여기저기 흩어지면
+ * 분류를 하나 더할 때 어딘가를 반드시 빠뜨린다.
+ */
+const REG_KINDS = {
+  student: { extraLabel: '학년·반 (선택)', extraHint: '예: 중2-1', school: true },
+  parent: { extraLabel: '자녀 이름 (선택)', extraHint: '예: 김믿음', school: false },
+  member: { extraLabel: '소속 전도회 (선택)', extraHint: '예: 한나전도회', school: false },
+};
+
 function renderRegister(email) {
   show('screen-register');
   el('#reg-account').textContent = email || '';
   el('#reg-error').textContent = '';
   el('#reg-name').value = '';
   el('#reg-extra').value = '';
+  el('#reg-school').value = '';
   el('#reg-code').value = '';
   setKind('student');
 
-  el('#reg-kind-student').onclick = function () { setKind('student'); };
-  el('#reg-kind-parent').onclick = function () { setKind('parent'); };
+  Object.keys(REG_KINDS).forEach(function (k) {
+    el('#reg-kind-' + k).onclick = function () { setKind(k); };
+  });
   el('#reg-submit').onclick = submitRegister;
   el('#reg-cancel').onclick = function () { auth.signOut(); };
 }
@@ -162,11 +176,18 @@ function renderRegister(email) {
 let regKind = 'student';
 
 function setKind(kind) {
-  regKind = kind;
-  el('#reg-kind-student').classList.toggle('on', kind === 'student');
-  el('#reg-kind-parent').classList.toggle('on', kind === 'parent');
-  el('#reg-extra-label').textContent = kind === 'student' ? '학년·반 (선택)' : '자녀 이름 (선택)';
-  el('#reg-extra').placeholder = kind === 'student' ? '예: 중2-1' : '예: 김믿음';
+  const cfg = REG_KINDS[kind] || REG_KINDS.student;
+  regKind = REG_KINDS[kind] ? kind : 'student';
+
+  Object.keys(REG_KINDS).forEach(function (k) {
+    el('#reg-kind-' + k).classList.toggle('on', k === regKind);
+  });
+  el('#reg-extra-label').textContent = cfg.extraLabel;
+  el('#reg-extra').placeholder = cfg.extraHint;
+
+  // 고르지 않은 분류의 칸은 아예 감춘다 — 요청: "학부모 가입인데 학교 입력 안 뜨게"
+  el('#reg-school-row').hidden = !cfg.school;
+  if (!cfg.school) el('#reg-school').value = '';
 }
 
 async function submitRegister() {
@@ -176,8 +197,10 @@ async function submitRegister() {
   try {
     const res = await api.call('register', {
       name: el('#reg-name').value,
-      kind: regKind,               // 서버는 student/parent만 허용한다 (계약 §4.2)
+      kind: regKind,               // 서버는 student/parent/member만 허용한다 (계약 §4.2)
       extra: el('#reg-extra').value,
+      // 학교는 학생일 때만 보낸다. 서버도 다른 kind가 보내면 무시한다(이중 방어).
+      school: regKind === 'student' ? el('#reg-school').value : '',
       code: el('#reg-code').value,
     });
     if (!res.ok) {
@@ -259,7 +282,13 @@ function failToLogin(code) {
 // ---------------------------------------------------------------------------
 
 function visibleTabs() {
-  return TABS.filter(function (t) { return !t.teacherOnly || isTeacher(); });
+  return TABS.filter(function (t) {
+    if (t.teacherOnly && !isTeacher()) return false;
+    // 성도는 기도 요청 기능이 없다 (계약 §2.2b). 서버가 막으므로 탭을 두면
+    // 눌러도 오류만 보게 된다.
+    if (t.id === 'prayer' && !isPrayerUser()) return false;
+    return true;
+  });
 }
 
 function renderApp() {
@@ -270,8 +299,8 @@ function renderApp() {
   viewToday.restoreDraftContext();
   const s = state.session;
   el('#app-name').textContent = s.name || '';
-  el('#app-kind').textContent =
-    s.kind === 'teacher' ? '담임교사' : (s.kind === 'parent' ? '학부모' : '학생');
+  const KIND_LABEL = { teacher: '담임교사', parent: '학부모', student: '학생', member: '성도' };
+  el('#app-kind').textContent = KIND_LABEL[s.kind] || '';
 
   el('#nav').innerHTML = visibleTabs().map(function (t) {
     // 아이콘 위 / 글자 아래. 휴대폰에서 누를 면적을 넉넉히 잡기 위한 배치다.
@@ -326,8 +355,12 @@ function renderTab() {
       break;
     case 'today': viewToday.render(root); break;
     case 'calendar': viewCalendar.render(root); break;
-    case 'prayer': viewPrayer.render(root); break;
     case 'library': viewLibrary.render(root); break;
+    case 'prayer':
+      // class 탭과 대칭인 방어. 상태가 어긋나 성도가 이 탭에 오면 오늘로 돌린다.
+      if (!isPrayerUser()) { state.tab = 'today'; renderTab(); return; }
+      viewPrayer.render(root);
+      break;
     case 'class':
       if (!isTeacher()) { state.tab = 'today'; renderTab(); return; }
       viewClass.render(root);
