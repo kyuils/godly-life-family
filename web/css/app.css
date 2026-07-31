@@ -141,6 +141,9 @@
       /* 앱 셸 */
       --app-max: 460px;
       --appbar-h: 56px;
+      /* 탭 줄 높이. app.js가 화면을 그린 뒤 실제 값으로 덮어쓴다 —
+         자료 머리줄이 이 값만큼 아래에 붙는다. */
+      --topnav-h: 64px;
     }
 
     /* ── Dark theme — <html data-theme="dark"> ── */
@@ -762,10 +765,23 @@
     }
 
     /* 자료 화면 머리줄 — «‹ 제목 ☰». ☰는 오른쪽 끝에 붙는다 (2026-07-31 요청).
-       .section-head를 쓰지 않는 이유는 view-library.js의 주석 참조. */
+       .section-head를 쓰지 않는 이유는 view-library.js의 주석 참조.
+
+       ★ 탭 줄 바로 아래에 «붙어서» 따라온다 (2026-07-31 2차 신고:
+         "자료를 스크롤해서 올리면 선택하는 메뉴가 같이 올라가서 안 보이게 돼").
+         이 줄에 ☰가 있어서, 사라지면 다른 자료로 갈 방법이 없어진다 —
+         자료 목록까지 되돌아 나가야 했던 예전 상태로 돌아가는 셈이다.
+
+       --topnav-h는 app.js가 탭 줄을 그린 뒤 실제 높이를 재서 넣는다.
+       탭 수(성도 3 / 학생 4 / 교사 5)와 글자 크기에 따라 달라지므로
+       숫자를 박아 두면 어긋난다. 아래 값은 JS가 돌기 전의 기본값이다. */
     .lib-head{
+      position:sticky;top:calc(env(safe-area-inset-top) + var(--topnav-h));z-index:8;
       display:flex;align-items:center;gap:var(--space-4);
-      padding:var(--space-10) var(--space-12) var(--space-6);
+      padding:var(--space-10) var(--space-12) var(--space-8);
+      /* 배경이 없으면 본문이 이 줄 뒤로 비쳐 지나간다 */
+      background:var(--semantic-background-normal-normal);
+      border-bottom:1px solid var(--semantic-line-solid-alternative);
     }
     .lib-head-title{
       flex:1;min-width:0;text-align:center;

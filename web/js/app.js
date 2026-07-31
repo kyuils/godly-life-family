@@ -67,6 +67,24 @@ function show(screen) {
  * 그래서 저장하지 않고 바깥 브라우저로 열도록 안내한다.
  */
 /**
+ * 탭 줄의 실제 높이를 재어 --topnav-h에 넣는다.
+ *
+ * 자료 화면의 «‹ 제목 ☰» 줄이 이 값만큼 아래에 붙어 따라온다
+ * (2026-07-31 신고: "자료를 스크롤해서 올리면 선택하는 메뉴가 같이 올라가서
+ *  안 보이게 돼"). 그 줄에 ☰가 있어서 사라지면 다른 자료로 갈 수 없다.
+ *
+ * ★ 숫자를 CSS에 박지 않는 이유: 탭 수가 분류마다 다르고(성도 3·학생 4·교사 5),
+ *   사용자가 글자 크기를 키우면 줄 높이도 달라진다. 박아 두면 그만큼 틈이
+ *   벌어지거나 겹친다.
+ */
+function measureNav() {
+  const nav = el('#nav');
+  if (!nav) return;
+  const h = Math.round(nav.getBoundingClientRect().height);
+  if (h > 0) document.documentElement.style.setProperty('--topnav-h', h + 'px');
+}
+
+/**
  * «앱으로 설치하기» 안내 (2026-07-31 요청: "가입고 로그인시 앱 형태로 설치되게 안내").
  *
  * 로그인 화면과 가입 화면 두 곳에서 같은 함수를 쓴다. 홈에 두지 않는 이유:
@@ -354,6 +372,7 @@ function renderApp() {
   el('#nav').querySelectorAll('[data-tab]').forEach(function (b) {
     b.onclick = function () { state.tab = b.dataset.tab; renderApp(); };
   });
+  measureNav();
 
   // 제목줄의 앱 이름 = 홈으로 가는 문. 홈을 탭으로 넣으면 교사 탭이 6개가 되어
   // 직전에 고친 «탭이 작다» 문제가 되살아난다.
@@ -424,6 +443,10 @@ function backToLogin(message) {
   renderLogin();
   el('#login-notice').textContent = message || '';
 }
+
+// 화면을 돌리거나 글자 크기를 바꾸면 탭 줄 높이가 달라진다 — 다시 잰다.
+// (자료 머리줄이 이 값만큼 아래에 붙으므로, 안 재면 틈이 벌어지거나 겹친다)
+window.addEventListener('resize', measureNav);
 
 window.addEventListener('app:session-expired', function (e) {
   // 화면을 갈아엎기 전에 작성 중이던 내용을 메모리에 보관한다.
