@@ -6,16 +6,8 @@
   "type": "chapters",
   "count": 33,
   "file": "wcf.json",
-  "bytes": 116252
- },
- {
-  "id": "wsc",
-  "title": "웨스트민스터 소요리문답",
-  "shortTitle": "소요리문답",
-  "type": "catechism",
-  "count": 107,
-  "file": "wsc.json",
-  "bytes": 46178
+  "bytes": 116252,
+  "group": "westminster"
  },
  {
   "id": "wlc",
@@ -24,7 +16,18 @@
   "type": "catechism",
   "count": 196,
   "file": "wlc.json",
-  "bytes": 162547
+  "bytes": 162547,
+  "group": "westminster"
+ },
+ {
+  "id": "wsc",
+  "title": "웨스트민스터 소요리문답",
+  "shortTitle": "소요리문답",
+  "type": "catechism",
+  "count": 107,
+  "file": "wsc.json",
+  "bytes": 46178,
+  "group": "westminster"
  },
  {
   "id": "worship",
@@ -33,7 +36,8 @@
   "type": "chapters",
   "count": 17,
   "file": "worship.json",
-  "bytes": 49418
+  "bytes": 49418,
+  "group": "westminster"
  },
  {
   "id": "creed",
@@ -42,7 +46,8 @@
   "type": "chapters",
   "count": 3,
   "file": "creed.json",
-  "bytes": 8749
+  "bytes": 8749,
+  "group": "gapck"
  },
  {
   "id": "heidelberg",
@@ -51,6 +56,7 @@
   "type": "catechism",
   "count": 129,
   "file": "heidelberg.json",
-  "bytes": 89183
+  "bytes": 89183,
+  "group": "continental"
  }
 ]
