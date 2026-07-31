@@ -18,7 +18,7 @@
 //     남으면 안 된다 (가정에서 폰을 공유하는 것이 기본 시나리오 — 계약 §6.1).
 //   - 다른 출처(구글 로그인, GAS 웹앱)는 캐시하지 않는다.
 
-const BUILD_TAG = 'v1.0.1';
+const BUILD_TAG = 'v1.1.0';
 const CACHE = 'godly-life-family-' + BUILD_TAG;
 
 // 오프라인 최초 진입을 위한 최소 세트.

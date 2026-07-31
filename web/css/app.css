@@ -672,7 +672,65 @@
     .prayer-collapsed .prayer-answered-tag{margin-left:0}
     .prayer-chevron{margin-left:auto;color:var(--semantic-label-assistive);font-size:18px;line-height:1}
 
+    /* ---- 홈 (로그인 직후 첫 화면, 2026-07-31) ---- */
+    .appbar-home{
+      display:flex;flex-direction:column;align-items:flex-start;gap:0;
+      background:none;padding:0;text-align:left;
+    }
+    .home{padding:16px}
+    .home-greet{
+      margin:4px 0 18px;font-size:var(--type-body1-size);
+      color:var(--semantic-label-neutral);word-break:keep-all;
+    }
+    /* 두 칸씩. 좁은 화면(360px 미만)에서는 한 칸으로 떨어뜨린다. */
+    .home-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media(max-width:359px){.home-grid{grid-template-columns:1fr}}
+    .home-card{
+      display:flex;flex-direction:column;align-items:flex-start;gap:4px;
+      min-height:132px;padding:18px 16px;border-radius:var(--radius-xl);
+      border:1px solid var(--semantic-line-solid-normal);
+      background:var(--semantic-background-normal-normal);
+      box-shadow:var(--shadow-spread-small);text-align:left;
+    }
+    .home-card:active{background:var(--semantic-fill-alternative)}
+    .home-icon{font-size:2rem;line-height:1.1;margin-bottom:6px}
+    .home-title{font-size:var(--type-body1-size);font-weight:var(--weight-bold-text);color:var(--semantic-label-normal)}
+    .home-desc{font-size:var(--type-caption1-size);color:var(--semantic-label-alternative);line-height:1.45;word-break:keep-all}
+
     /* ---- 참고자료 (요구사항 4) ---- */
+    /* 분류 그룹 (2026-07-31) */
+    .lib-group{margin-top:18px}
+    .lib-group:first-of-type{margin-top:4px}
+    .lib-group-head{padding:0 16px 6px;display:flex;flex-direction:column;gap:2px}
+    .lib-group-label{font-size:var(--type-body2-size);font-weight:var(--weight-bold-text);color:var(--semantic-label-normal)}
+    .lib-group-note{font-size:var(--type-caption1-size);color:var(--semantic-label-assistive)}
+
+    /* 장 안의 «항» */
+    .lib-sec{margin-top:14px;padding-left:12px;border-left:2px solid var(--semantic-line-solid-alternative)}
+    .lib-sec-no{
+      display:inline-block;padding:1px 8px;border-radius:6px;margin-bottom:2px;
+      background:color-mix(in srgb, var(--dev-verse) 14%, transparent);color:var(--dev-verse-fg);
+      font-size:12px;font-weight:800;
+    }
+
+    /* ☰ 시트 — 다른 자료 + 목차 (휴대폰 폭이라 좌우 2단 대신 위아래 1단) */
+    .nav-sec-title{margin:14px 0 6px;font-size:var(--type-caption1-size);font-weight:var(--weight-bold-text);color:var(--semantic-label-assistive)}
+    .nav-sec-title:first-child{margin-top:0}
+    .sheet-group{margin:10px 0 4px;font-size:var(--type-caption2-size);color:var(--semantic-label-assistive)}
+    .nav-doc{
+      display:block;width:100%;text-align:left;padding:11px 12px;margin-bottom:4px;
+      border-radius:var(--radius-md);background:var(--semantic-fill-alternative);
+      font-size:var(--type-label1-size);color:var(--semantic-label-normal);
+    }
+    .nav-doc.on{background:color-mix(in srgb, var(--semantic-primary-normal) 12%, transparent);font-weight:var(--weight-bold-text)}
+    .nav-toc-list{display:flex;flex-direction:column}
+    .nav-toc{
+      display:flex;align-items:baseline;gap:10px;width:100%;text-align:left;
+      padding:10px 12px;border-bottom:1px solid var(--semantic-line-solid-alternative);
+    }
+    .nav-toc-no{flex-shrink:0;min-width:44px;font-weight:var(--weight-bold-text);color:var(--semantic-label-normal);font-size:var(--type-label1-size)}
+    .nav-toc-sub{color:var(--semantic-label-alternative);font-size:var(--type-caption1-size);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
     .lib-item{
       display:flex;align-items:center;gap:10px;width:calc(100% - 32px);
       margin:6px 16px;padding:14px 16px;border-radius:var(--radius-lg);

@@ -3,7 +3,7 @@
 
 export const state = {
   session: null,      // { email, name, role, kind, extra, joinedAt }
-  tab: 'today',
+  tab: 'home',        // 로그인 직후 첫 화면은 홈(큰 아이콘 4개)
   months: [],         // 달력이 현재 보유한 달 목록 (YYYY-MM)
   records: [],        // 달력 표시용 기록 (달 이동에 따라 교체됨)
   // 상단 지표(연속기록·달성률·중보기도)는 로그인 시 로드한 창으로 **고정**한다.
@@ -24,7 +24,7 @@ export const state = {
 /** 사용자별 데이터를 전부 비운다. 참고자료(공개 정적 파일)는 유지해도 무방하다. */
 export function resetUserData() {
   state.session = null;
-  state.tab = 'today';
+  state.tab = 'home';
   state.months = [];
   state.records = [];
   state.statsRecords = [];

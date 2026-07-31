@@ -10,6 +10,7 @@ import { loadMyData } from './load.js';
 import { el, escapeHtml, toast, closeSheet } from './ui.js';
 import { detectInApp, externalOpenUrl } from './inapp.js';
 
+import * as viewHome from './view-home.js';
 import * as viewToday from './view-today.js';
 import * as viewCalendar from './view-calendar.js';
 import * as viewPrayer from './view-prayer.js';
@@ -284,6 +285,14 @@ function renderApp() {
     b.onclick = function () { state.tab = b.dataset.tab; renderApp(); };
   });
 
+  // 제목줄의 앱 이름 = 홈으로 가는 문. 홈을 탭으로 넣으면 교사 탭이 6개가 되어
+  // 직전에 고친 «탭이 작다» 문제가 되살아난다.
+  el('#app-home').onclick = function () {
+    if (state.tab === 'home') return;
+    state.tab = 'home';
+    renderApp();
+  };
+
   el('#btn-signout').onclick = function () {
     if (window.confirm('로그아웃할까요?')) auth.signOut();
   };
@@ -312,6 +321,9 @@ function renderTab() {
   // 진행 중이던 비동기 렌더가 뒤늦게 이 화면을 덮어쓰지 못하게 세대를 올린다.
   bumpGeneration();
   switch (state.tab) {
+    case 'home':
+      viewHome.render(root, function (tab) { state.tab = tab; renderApp(); });
+      break;
     case 'today': viewToday.render(root); break;
     case 'calendar': viewCalendar.render(root); break;
     case 'prayer': viewPrayer.render(root); break;

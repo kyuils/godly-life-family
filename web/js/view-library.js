@@ -5,7 +5,7 @@
 // 화면 하단에 출처·저작권·이용조건을 항상 노출한다 (계약 §5.5.1).
 
 import { state, bumpGeneration, stale } from './state.js';
-import { el, escapeHtml, nl2br, toast } from './ui.js';
+import { el, escapeHtml, nl2br, toast, openSheet, closeSheet } from './ui.js';
 
 let openDocId = null;
 let query = '';
@@ -30,16 +30,50 @@ export async function render(root) {
   await renderDoc(root, openDocId);
 }
 
+/**
+ * 분류 그룹 정의 (2026-07-31 요청 — 신조·고백을 성격별로 묶어 본다).
+ *
+ * 라벨에 «합동 교단 표준문서가 아님»을 적는 이유: 대륙 개혁교회 문서를
+ * 우리 교단 표준문서로 오해하면 안 된다. 학생이 보는 화면이라 더 그렇다.
+ */
+const GROUPS = [
+  { id: 'westminster', label: '웨스트민스터 표준문서', note: '대한예수교장로회(합동) 헌법 수록' },
+  { id: 'gapck', label: '우리 교단 신조', note: '대한예수교장로회(합동) 헌법 수록' },
+  { id: 'continental', label: '대륙 개혁교회 문서', note: '합동 교단 표준문서는 아닙니다' },
+  { id: 'etc', label: '그 밖의 자료', note: '' },
+];
+
+function groupsWithDocs() {
+  return GROUPS
+    .map(function (g) {
+      const docs = state.library.filter(function (d) { return (d.group || 'etc') === g.id; });
+      return { group: g, docs: docs };
+    })
+    .filter(function (x) { return x.docs.length > 0; });
+}
+
+function docCardHtml(d) {
+  return (
+    '<button class="lib-item" data-doc="' + escapeHtml(d.id) + '">' +
+      '<div class="lib-title">' + escapeHtml(d.title) + '</div>' +
+      '<div class="lib-meta">' + countLabel(d) + '</div>' +
+      '<span class="prayer-chevron">›</span>' +
+    '</button>'
+  );
+}
+
 function renderList(root) {
   root.innerHTML =
     '<div class="section-head"><span>참고자료</span></div>' +
-    state.library.map(function (d) {
+    groupsWithDocs().map(function (x) {
       return (
-        '<button class="lib-item" data-doc="' + escapeHtml(d.id) + '">' +
-          '<div class="lib-title">' + escapeHtml(d.title) + '</div>' +
-          '<div class="lib-meta">' + countLabel(d) + '</div>' +
-          '<span class="prayer-chevron">›</span>' +
-        '</button>'
+        '<div class="lib-group">' +
+          '<div class="lib-group-head">' +
+            '<span class="lib-group-label">' + escapeHtml(x.group.label) + '</span>' +
+            (x.group.note ? '<span class="lib-group-note">' + escapeHtml(x.group.note) + '</span>' : '') +
+          '</div>' +
+          x.docs.map(docCardHtml).join('') +
+        '</div>'
       );
     }).join('');
   root.querySelectorAll('[data-doc]').forEach(function (b) {
@@ -80,7 +114,7 @@ async function renderDoc(root, id) {
     '<div class="section-head">' +
       '<button class="icon-btn" id="lib-back" aria-label="목록으로">‹</button>' +
       '<span>' + escapeHtml(doc.shortTitle || doc.title) + '</span>' +
-      '<span></span>' +
+      '<button class="icon-btn" id="lib-menu" aria-label="다른 자료·목차">☰</button>' +
     '</div>' +
     '<input class="form-input" id="lib-q" type="search" placeholder="이 문서에서 검색" value="' + escapeHtml(query) + '">' +
     (query ? '<div class="form-hint">' + filtered.length + '건 찾음</div>' : '') +
@@ -95,12 +129,73 @@ async function renderDoc(root, id) {
     clearTimeout(searchTimer);   // 대기 중인 검색이 뒤늦게 화면을 덮어쓰지 않도록
     openDocId = null; query = ''; render(root);
   };
+  el('#lib-menu').onclick = function () { openNavSheet(root, doc); };
   const q = el('#lib-q');
   q.oninput = function () {
     // 대요리문답은 196문답(162KB)이라 키 입력마다 재렌더하면 저사양 폰에서 버벅인다.
     clearTimeout(searchTimer);
     searchTimer = setTimeout(function () { applySearch(root, id, q); }, 180);
   };
+}
+
+/**
+ * ☰ — «다른 자료»와 «목차»를 한 장에 담은 시트.
+ *
+ * 왜 필요한가: 예전에는 자료를 보다가 다른 자료로 가려면 목록까지 되돌아
+ * 나와야 했다(2026-07-31 요청: "다른 자료는 다시 되돌아 나와서 봐야 해서 불편해").
+ * 휴대폰 폭에서는 좌우 2단이 양쪽 다 좁아지므로 위아래 1단으로 둔다.
+ */
+function openNavSheet(root, doc) {
+  const others = groupsWithDocs().map(function (x) {
+    return (
+      '<div class="sheet-group">' + escapeHtml(x.group.label) + '</div>' +
+      x.docs.map(function (d) {
+        const on = d.id === doc.id ? ' on' : '';
+        return '<button class="nav-doc' + on + '" data-goto-doc="' + escapeHtml(d.id) + '">' +
+          escapeHtml(d.title) + '</button>';
+      }).join('')
+    );
+  }).join('');
+
+  const units = doc.type === 'catechism' ? (doc.items || []) : (doc.sections || []);
+  const toc = units.map(function (u) {
+    const label = doc.type === 'catechism'
+      ? (u.no + '문')
+      : escapeHtml(u.title || (u.no + '장'));
+    const sub = doc.type === 'catechism'
+      ? escapeHtml(String(u.q || '').slice(0, 28))
+      : ((u.items && u.items.length) ? u.items.length + '항' : '');
+    return '<button class="nav-toc" data-goto-unit="' + u.no + '">' +
+      '<span class="nav-toc-no">' + label + '</span>' +
+      (sub ? '<span class="nav-toc-sub">' + sub + '</span>' : '') +
+      '</button>';
+  }).join('');
+
+  openSheet(doc.shortTitle || doc.title, '다른 자료로 바로 갈 수 있어요',
+    '<div class="nav-sheet">' +
+      '<div class="nav-sec-title">신조와 고백</div>' + others +
+      '<div class="nav-sec-title">목차</div>' +
+      '<div class="nav-toc-list">' + toc + '</div>' +
+    '</div>');
+
+  document.querySelectorAll('[data-goto-doc]').forEach(function (b) {
+    b.onclick = function () {
+      const id = b.dataset.gotoDoc;
+      closeSheet();
+      if (id === openDocId) return;
+      clearTimeout(searchTimer);
+      openDocId = id; query = '';
+      render(root);
+    };
+  });
+  document.querySelectorAll('[data-goto-unit]').forEach(function (b) {
+    b.onclick = function () {
+      const no = b.dataset.gotoUnit;
+      closeSheet();
+      const target = el('#lib-u-' + no);
+      if (target && target.scrollIntoView) target.scrollIntoView({ block: 'start' });
+    };
+  });
 }
 
 let searchTimer = null;
@@ -115,15 +210,19 @@ function applySearch(root, id, q) {
 }
 
 function matches(it, q) {
-  const hay = it.q !== undefined
-    ? (it.q + ' ' + it.a)
-    : (it.title + ' ' + (it.paras || []).join(' '));
-  return hay.indexOf(q) >= 0;
+  if (it.q !== undefined) return (it.q + ' ' + it.a).indexOf(q) >= 0;
+  // 항으로 나뉜 문서는 항 본문까지 봐야 한다 — 안 그러면 «몇 장 몇 항»의
+  // 내용이 검색되지 않는다.
+  const parts = [it.title || ''].concat(it.paras || []);
+  (it.items || []).forEach(function (x) {
+    parts.push((x.paras || []).join(' '));
+  });
+  return parts.join(' ').indexOf(q) >= 0;
 }
 
 function qaHtml(it) {
   return (
-    '<div class="qa">' +
+    '<div class="qa" id="lib-u-' + it.no + '">' +
       '<div class="qa-q"><span class="qa-no">' + it.no + '</span>' + escapeHtml(it.q) + '</div>' +
       '<div class="qa-a">' + nl2br(escapeHtml(it.a)) + '</div>' +
       (it.refs && it.refs.length
@@ -132,13 +231,33 @@ function qaHtml(it) {
   );
 }
 
+/**
+ * 장(章) 하나. 항(項)으로 나뉜 문서는 «몇 항»을 붙여 보여 준다 (2026-07-31 요청).
+ *
+ * `items`가 없는 문서(예배모범·12신조)는 예전처럼 문단만 이어서 보여 준다 —
+ * 데이터가 additive라 두 형태가 함께 존재할 수 있다.
+ */
 function chapterHtml(it) {
+  const hasItems = Array.isArray(it.items) && it.items.length > 0;
   return (
-    '<div class="qa">' +
+    '<div class="qa" id="lib-u-' + it.no + '">' +
       '<div class="qa-q">' + escapeHtml(it.title) + '</div>' +
-      (it.paras || []).map(function (p) {
-        return '<div class="qa-a">' + nl2br(escapeHtml(p)) + '</div>';
-      }).join('') +
+      (hasItems
+        ? it.items.map(function (x) {
+            return (
+              '<div class="lib-sec">' +
+                '<div class="lib-sec-no">' + x.no + '항</div>' +
+                (x.paras || []).map(function (p) {
+                  return '<div class="qa-a">' + nl2br(escapeHtml(p)) + '</div>';
+                }).join('') +
+                (x.refs && x.refs.length
+                  ? '<div class="qa-refs">' + escapeHtml(x.refs.join(' ')) + '</div>' : '') +
+              '</div>'
+            );
+          }).join('')
+        : (it.paras || []).map(function (p) {
+            return '<div class="qa-a">' + nl2br(escapeHtml(p)) + '</div>';
+          }).join('')) +
     '</div>'
   );
 }
