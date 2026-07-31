@@ -11,7 +11,7 @@
 // (scripts/check-web.mjs가 이 대응을 검사한다 — 오탈자로 눌러도 안 열리는
 //  칸이 생기는 것을 막는다).
 
-import { el, escapeHtml } from './ui.js';
+import { escapeHtml } from './ui.js';
 import { state, isPrayerUser } from './state.js';
 
 const CARDS = [
