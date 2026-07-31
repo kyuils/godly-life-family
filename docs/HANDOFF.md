@@ -110,12 +110,19 @@ node scripts/fetch-library.mjs     # 원격에서 자료 재수집 (네트워크
 > **코드·문서·테스트는 끝났고 GitHub에 올라가 있다. 남은 것은 «서버(GAS) 배포»뿐이다.**
 > 사후 시니어 검토도 반영을 마쳤다 → [`docs/reviews/2026-07-31-senior-review-v3.md`](reviews/2026-07-31-senior-review-v3.md)
 >
-> **집에서 이어서 할 일:**
-> 1. [`docs/plans/2026-07-31-v2-step3-signup.md`](plans/2026-07-31-v2-step3-signup.md) **§10의 8단계**를 순서대로.
->    ★ **서버(GAS) 먼저, 웹 나중.** 반대로 하면 「혜림교회 성도」를 골랐을 때 원인 불명 오류가 난다.
->    (웹은 이미 올라가 있으므로, GAS를 올리는 즉시 순서가 맞춰진다)
-> 2. 그다음 [`docs/ops/05-test-checklist.md`](ops/05-test-checklist.md)의 **B-2 «혜림교회 성도»** 절을 실제 계정으로.
->    성도에게 기도 탭이 하나라도 보이면 GAS 재배포가 안 된 것이다.
+> **집에서 이어서 할 일 — [`docs/ops/07-update-v1.2.md`](ops/07-update-v1.2.md) 하나만 따라 하면 된다** (약 10분).
+> 클릭 순서로 적어 두었다: 사본 만들기 → G열 확인 → `.gs` 5개 붙여넣기 →
+> `SETUP_SHEET_ID`만 채우기 → `setupAll` → 눈으로 확인 → **배포 관리 → 수정 → 새 버전** →
+> `build`가 `v1.2.0`인지 확인.
+>
+> 웹은 **이미 올라가 있다.** 그래서 지금은 화면만 새 버전이고, 새 가입자가
+> 「혜림교회 성도」를 고르면 서버가 모르는 값이라 엉뚱한 안내가 뜬다(데이터는 상하지 않는다).
+> GAS를 올리는 즉시 맞춰진다.
+>
+> 그다음 [`docs/ops/05-test-checklist.md`](ops/05-test-checklist.md)의 **B-2 «혜림교회 성도»** 절을 실제 계정으로.
+> 성도에게 기도 탭이 하나라도 보이면 GAS 재배포가 안 된 것이다.
+>
+> (설계 근거와 대안 검토는 [`docs/plans/2026-07-31-v2-step3-signup.md`](plans/2026-07-31-v2-step3-signup.md) §10)
 
 **계획서: [`docs/plans/2026-07-31-v2-step3-signup.md`](plans/2026-07-31-v2-step3-signup.md) (r3, 검토 2회 + 사후 검토 반영)**
 
