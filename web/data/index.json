@@ -50,6 +50,26 @@
   "group": "gapck"
  },
  {
+  "id": "apostles",
+  "title": "사도신경",
+  "shortTitle": "사도신경",
+  "type": "chapters",
+  "count": 1,
+  "file": "apostles.json",
+  "bytes": 1795,
+  "group": "ecumenical"
+ },
+ {
+  "id": "nicene",
+  "title": "니케아 신경",
+  "shortTitle": "니케아 신경",
+  "type": "chapters",
+  "count": 4,
+  "file": "nicene.json",
+  "bytes": 2799,
+  "group": "ecumenical"
+ },
+ {
   "id": "heidelberg",
   "title": "하이델베르크 요리문답",
   "shortTitle": "하이델베르크 요리문답",

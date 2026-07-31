@@ -39,6 +39,7 @@ export async function render(root) {
 const GROUPS = [
   { id: 'westminster', label: '웨스트민스터 표준문서', note: '대한예수교장로회(합동) 헌법 수록' },
   { id: 'gapck', label: '우리 교단 신조', note: '대한예수교장로회(합동) 헌법 수록' },
+  { id: 'ecumenical', label: '보편 신조', note: '전 세계 교회가 함께 고백해 온 신조' },
   { id: 'continental', label: '대륙 개혁교회 문서', note: '합동 교단 표준문서는 아닙니다' },
   { id: 'etc', label: '그 밖의 자료', note: '' },
 ];

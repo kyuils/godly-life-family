@@ -89,10 +89,19 @@ for (const entry of index) {
 
   // source — license 포함 필수 (계약 §5.4/§5.5)
   const src = doc.source || {};
-  for (const k of ['name', 'url', 'fetchedAt', 'license']) {
+  for (const k of ['name', 'fetchedAt', 'license']) {
     check(id + ': source.' + k + ' 비어있지 않음', () =>
       (typeof src[k] === 'string' && src[k].trim().length > 0) || 'empty source.' + k);
   }
+  // url은 «웹에서 받아온 자료»의 추적 수단이다. 담임교사가 직접 준 본문처럼
+  // 웹 출처가 아예 없는 자료도 있는데, 그때 가짜 URL을 채우면 추적성이 오히려
+  // 나빠진다. 대신 «url이 없으면 note에 경위가 반드시 적혀 있을 것»을 요구한다.
+  check(id + ': 출처를 추적할 수 있다 (url, 없으면 note에 경위)', () => {
+    const hasUrl = typeof src.url === 'string' && src.url.trim().length > 0;
+    if (hasUrl) return true;
+    const note = typeof src.note === 'string' ? src.note.trim() : '';
+    return note.length >= 20 || 'url이 비어 있는데 note에 출처 경위가 없다';
+  });
   check(id + ': source.licenseConfidence가 확정/추정/제한적 중 하나', () =>
     ['확정', '추정', '제한적'].includes(src.licenseConfidence) || 'got: ' + src.licenseConfidence);
   check(id + ': source.fetchedAt이 YYYY-MM-DD', () =>
