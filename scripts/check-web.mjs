@@ -45,7 +45,14 @@ function codeOnly(src) {
   return String(src)
     // ★ 줄 주석을 먼저 지운다. 순서를 바꾸면, 주석 안에 쓴 경로("web/data/*.json")의
     //   '/*' 가 블록 주석 시작으로 오인돼 그 뒤 코드를 통째로 삼킨다(2026-07-30 실제 발생).
-    .split('\n')
+    //
+    // ★★ split을 /\r?\n/ 로 하는 이유 (2026-07-31 실제 발생):
+    //   윈도우에서 파일이 CRLF로 저장되면 '\n'으로만 자를 때 각 줄 끝에 '\r'이 남는다.
+    //   그런데 정규식의 '.' 은 '\r'을 매칭하지 않으므로(줄 종결자다) '//.*$' 가
+    //   **한 줄도 매칭되지 않는다.** 그러면 줄 주석이 하나도 제거되지 않아,
+    //   주석에 적어 둔 이름·금지어가 전부 «코드»로 오인된다.
+    //   실제로 state.js 주석의 resetAll()·renderTab()이 호출로 잡혀 검사가 터졌다.
+    .split(/\r?\n/)
     .map((line) => line.replace(/(^|[^:])\/\/.*$/, '$1'))
     .join('\n')
     .replace(/\/\*[\s\S]*?\*\//g, '');
@@ -315,6 +322,53 @@ check('★ 화면 전환(hidden)을 CSS가 무력화하지 않는다', () => {
   const ids = ['screen-login', 'screen-register', 'screen-app'];
   const missing = ids.filter((id) => !new RegExp('id="' + id + '"').test(html));
   return missing.length === 0 || 'index.html에 없는 화면: ' + missing.join(', ');
+});
+
+check('★ 검사기 자기점검 — 주석 제거가 CRLF에서도 동작한다', () => {
+  // 이 검사기의 거의 모든 규칙이 codeOnly()에 의존한다. 여기가 조용히 망가지면
+  // 주석에 적어 둔 이름·금지어가 «코드»로 오인되고(오탐), 반대로 주석 처리된
+  // 코드가 살아 있는 것으로 보인다(미탐). 2026-07-31에 실제로 CRLF 파일에서
+  // 줄 주석이 하나도 제거되지 않는 상태였다 — '.' 은 '\r'을 매칭하지 않는다.
+  // 이 저장소에 실제로 존재할 수 있는 두 형식만 본다. CR만 쓰는 줄바꿈은
+  // git이 만들지 않으므로 검사 대상이 아니다(넣으면 늘 실패하는 검사가 된다).
+  const cases = [
+    ['LF',   'const a = 1;\n// 주석 안의 doSomething()\nconst b = 2;'],
+    ['CRLF', 'const a = 1;\r\n// 주석 안의 doSomething()\r\nconst b = 2;'],
+  ];
+  const bad = cases
+    .filter(([, src]) => codeOnly(src).includes('doSomething'))
+    .map(([name]) => name);
+  if (bad.length) return '주석이 제거되지 않는 줄바꿈 형식: ' + bad.join(', ');
+
+  // URL의 '//'는 주석이 아니다 (기존 동작 유지 확인)
+  if (!codeOnly("const u = 'https://example.com/x';").includes('example.com')) {
+    return "https:// 를 주석으로 잘못 지운다";
+  }
+  return true;
+});
+
+check('★ 홈 아이콘 4개가 실제 탭과 연결된다', () => {
+  // 홈 카드의 data-tab에 오탈자가 있으면 «눌러도 아무 일도 안 일어나는 칸»이
+  // 생긴다. 화면을 봐야만 알 수 있는 종류라 정적으로 대조해 둔다.
+  const home = codeOnly(read(path.join(JS, 'view-home.js')));
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+
+  const cardTabs = [...home.matchAll(/tab:\s*'([a-z]+)'/g)].map((m) => m[1]);
+  if (cardTabs.length !== 4) return '홈 카드가 4개가 아니다: ' + cardTabs.length + '개';
+
+  // app.js의 TABS 배열에서 id 수집
+  const tabsBlock = /const TABS = \[([\s\S]*?)\];/.exec(app);
+  if (!tabsBlock) return 'app.js에서 TABS 배열을 찾지 못함';
+  const tabIds = [...tabsBlock[1].matchAll(/id:\s*'([a-z]+)'/g)].map((m) => m[1]);
+
+  const orphan = cardTabs.filter((t) => !tabIds.includes(t));
+  if (orphan.length) return 'TABS에 없는 목적지: ' + orphan.join(', ') + ' (있는 탭: ' + tabIds.join(', ') + ')';
+
+  // 홈은 탭이 아니어야 한다 — 탭이 6개가 되면 누르기 어려워진다
+  if (tabIds.includes('home')) return '홈이 TABS에 들어가 있다 — 탭 수가 늘면 탭이 작아진다';
+
+  // renderTab이 home을 실제로 처리하는지
+  return /case 'home'/.test(app) || "renderTab에 case 'home'이 없다 — 홈이 빈 화면이 된다";
 });
 
 check('★ 인앱 브라우저 안내가 화면과 코드에 모두 있다', () => {

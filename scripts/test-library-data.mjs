@@ -8,8 +8,10 @@
 // 실패 시 exit 1. 통과 시 exit 0 + "ALL TESTS PASSED".
 
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { WCF_ITEM_COUNTS } from './lib-sections.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '..', 'web', 'data');
@@ -175,6 +177,87 @@ for (const entry of index) {
     return true;
   });
   check(id + ': 한글이 포함됨 (인코딩 사고 감지)', () => /[가-힣]/.test(blob) || '한글 없음');
+}
+
+// ---------------------------------------------------------------------------
+// 신도게요서 «항(項)» 구조 (2026-07-31 요청)
+// ---------------------------------------------------------------------------
+//
+// 수집 원문은 «장»까지만 나뉘어 있어 문단이 평평하게 들어온다. 이를 항으로
+// 묶는 규칙(scripts/lib-sections.mjs)이 조용히 어긋나면 «몇 장 몇 항»이 전부
+// 밀린다. 개수만 세면 각주가 이웃 항으로 넘어간 오류를 못 잡으므로,
+// 본문 지문(해시)까지 고정한다. 원문을 코드에 옮겨 적지 않으려고 해시를 쓴다.
+{
+  const wcf = JSON.parse(readFileSync(path.join(DATA_DIR, 'wcf.json'), 'utf8'));
+  const digest = (s) => createHash('sha256').update(s, 'utf8').digest('hex').slice(0, 16);
+  const itemOf = (ch, no) => {
+    const sec = wcf.sections.find((s) => s.no === ch);
+    return sec && sec.items ? sec.items.find((i) => i.no === no) : null;
+  };
+
+  check('wcf: 모든 장에 items가 있다', () =>
+    wcf.sections.every((s) => Array.isArray(s.items) && s.items.length > 0) ||
+    'items 없는 장: ' + wcf.sections.filter((s) => !(s.items || []).length).map((s) => s.no).join(', '));
+
+  check('wcf: 장별 항 수가 기준과 일치한다 (OPC 판 — 31장은 4항)', () => {
+    const wrong = wcf.sections
+      .filter((s) => (s.items || []).length !== WCF_ITEM_COUNTS[s.no - 1])
+      .map((s) => s.no + '장(기준 ' + WCF_ITEM_COUNTS[s.no - 1] + ' → ' + (s.items || []).length + ')');
+    return wrong.length === 0 || wrong.join(', ');
+  });
+
+  check('wcf: 총 171항', () => {
+    const n = wcf.sections.reduce((a, s) => a + (s.items || []).length, 0);
+    return n === 171 || '총 ' + n + '항';
+  });
+
+  check('wcf: 항 번호가 1..N 연속이다', () => {
+    const bad = wcf.sections.filter((s) =>
+      (s.items || []).some((it, i) => it.no !== i + 1));
+    return bad.length === 0 || '번호가 어긋난 장: ' + bad.map((s) => s.no).join(', ');
+  });
+
+  check('wcf: 본문이 빈 항이 없다', () => {
+    const bad = [];
+    wcf.sections.forEach((s) => (s.items || []).forEach((it) => {
+      if (!Array.isArray(it.paras) || it.paras.length === 0) bad.push(s.no + '-' + it.no);
+    }));
+    return bad.length === 0 || '빈 항: ' + bad.join(', ');
+  });
+
+  check('wcf: 각주가 없는 항이 없다 (후기는 항에서 제외되어야 한다)', () => {
+    const bad = [];
+    wcf.sections.forEach((s) => (s.items || []).forEach((it) => {
+      if (!Array.isArray(it.refs) || it.refs.length === 0) bad.push(s.no + '장 ' + it.no + '항');
+    }));
+    return bad.length === 0 || '각주 없는 항: ' + bad.join(', ');
+  });
+
+  check('wcf: 역문 후기가 항이 아니라 postscript로 분리되어 있다', () =>
+    (Array.isArray(wcf.postscript) && wcf.postscript.length === 1) ||
+    'postscript: ' + JSON.stringify(wcf.postscript || null));
+
+  check('★ wcf: 전체 지문 — 항의 «내용»이 바뀌지 않았다', () => {
+    // ★ 개수 검사만으로는 부족하다. 각주 연속행 «(눅 16:29 …)»을 각주로 보지
+    //   않으면 그 줄이 다음 항 본문 맨 앞에 붙는데, **항의 개수는 그대로다.**
+    //   (실제로 규칙을 약화시켜 확인했다 — 1장은 여전히 10항이 나온다.)
+    //   그래서 대표 항 몇 개가 아니라 **전 171항의 본문·각주 전체**를 지문으로
+    //   묶어 고정한다. 어느 항이 한 줄이라도 달라지면 값이 바뀐다.
+    const blob = wcf.sections
+      .map((s) => (s.items || [])
+        .map((i) => i.no + '|' + i.paras.join('\n') + '|' + i.refs.join('\n'))
+        .join('\n'))
+      .join('\n');
+    const expected = '25bb06b7a5577ee7';
+    const actual = digest(blob);
+    return actual === expected ||
+      '기대 ' + expected + ' / 실제 ' + actual +
+      ' — 항 분리 규칙이나 원문이 바뀌었습니다. 의도한 변경이면 이 값을 갱신하세요.';
+  });
+
+  check('wcf: 기존 paras가 보존되어 있다 (additive — 되돌리기 안전)', () =>
+    wcf.sections.every((s) => Array.isArray(s.paras) && s.paras.length > 0) ||
+    'paras가 사라진 장이 있다');
 }
 
 // index에 없는 데이터 파일이 굴러다니지 않는지
