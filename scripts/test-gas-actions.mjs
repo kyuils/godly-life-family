@@ -31,6 +31,19 @@ function eq(actual, expected, what) {
   return (what || 'value') + ': expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual);
 }
 
+/**
+ * eq() 여러 개를 한 테스트에서 확인한다.
+ *
+ * ★ `eq(a) || eq(b)` 로 쓰면 **b는 절대 평가되지 않는다.** eq는 성공 시 true,
+ *   실패 시 문자열을 돌려주는데 둘 다 truthy라 `||`가 항상 첫 값에서 단락한다.
+ *   그렇게 쓴 단언은 통과하지만 아무것도 검증하지 않는다
+ *   (2026-07-31 시니어 검토가 실제로 잡아낸 결함).
+ */
+function all(...checks) {
+  const bad = checks.filter((c) => c !== true);
+  return bad.length === 0 || bad.join(' / ');
+}
+
 // 공통 시드
 const STUDENT = 'student1@example.com';
 const PARENT = 'parent1@example.com';
@@ -41,8 +54,11 @@ const MEMBER = 'member1@example.com';   // 혜림교회 성도 (v1.2)
 function seedBase(extra = {}) {
   return Object.assign({
     students: [
-      { email: STUDENT, 이름: '김학생', 학년반: '중2-1', active: 'TRUE', 가입시각: '2026-01-15', 가입경로: 'self' },
-      { email: OTHER, 이름: '이학생', 학년반: '중3-2', active: 'TRUE', 가입시각: '2026-02-01', 가입경로: 'self' },
+      // ★ 학교 값을 실제로 넣어 둔다. 비워 두면 «응답에 학교가 없다» 테스트가
+      //   공허해진다 — 시트에 값이 없으니 유출될 값도 없어 무조건 통과한다
+      //   (2026-07-31 시니어 검토 지적).
+      { email: STUDENT, 이름: '김학생', 학년반: '중2-1', 학교: '혜림중학교', active: 'TRUE', 가입시각: '2026-01-15', 가입경로: 'self' },
+      { email: OTHER, 이름: '이학생', 학년반: '중3-2', 학교: '샛별고등학교', active: 'TRUE', 가입시각: '2026-02-01', 가입경로: 'self' },
     ],
     parents: [
       { email: PARENT, 이름: '박학부모', 자녀이름: '김학생', active: 'TRUE', 가입시각: '2026-01-20', 가입경로: 'self' },
@@ -738,8 +754,11 @@ section('★ 가입 3분류 — 성도(member) (v1.2)');
   t('성도가 로그인하면 kind/role이 member다', () => {
     const r = h.callAction({ action: 'whoami', idToken: tok(MEMBER) });
     if (!r.ok) return JSON.stringify(r);
-    return eq(r.kind, 'member', 'kind') || eq(r.role, 'member', 'role') ||
-      eq(r.extra, '한나전도회', 'extra');
+    return all(
+      eq(r.kind, 'member', 'kind'),
+      eq(r.role, 'member', 'role'),
+      eq(r.extra, '한나전도회', 'extra')
+    );
   });
 
   t('★ 성도는 교사 전용 액션 3개에 전부 forbidden', () => {
@@ -803,10 +822,24 @@ section('★ 가입 3분류 — 성도(member) (v1.2)');
     return inList.length === 0 || 'getMembers에 성도가 들어 있다';
   });
 
-  t('★ getMembers 응답에 학교가 들어 있지 않다 (시트에만 둔다)', () => {
-    const r = h.callAction({ action: 'getMembers', idToken: tok(TEACHER) });
-    if (!r.ok) return JSON.stringify(r);
-    return /"school"|학교/.test(JSON.stringify(r)) ? '응답에 학교가 있다' : true;
+  // 계약 §2.1은 "학교는 **어떤 API 응답에도** 넣지 않는다"고 못박았다. 그러므로
+  // 교사 화면(getMembers)만이 아니라 본인 조회(whoami)·가입(register)까지 본다.
+  // 시드 학생에 실제 학교 값이 들어 있으므로(위 seedBase 주석) 새면 여기서 잡힌다.
+  t('★ 어떤 응답에도 학교가 들어 있지 않다 (시트에만 둔다)', () => {
+    const responses = [
+      ['getMembers', h.callAction({ action: 'getMembers', idToken: tok(TEACHER) })],
+      ['whoami', h.callAction({ action: 'whoami', idToken: tok(STUDENT) })],
+      ['getAllRecords', h.callAction({ action: 'getAllRecords', idToken: tok(TEACHER), days: 60 })],
+    ];
+    const bad = [];
+    responses.forEach(([label, r]) => {
+      if (!r.ok) { bad.push(label + ': ' + JSON.stringify(r)); return; }
+      const blob = JSON.stringify(r);
+      // 열 이름(key)과 실제 값(value) 둘 다 본다. 값만 보면 빈 열이 새는 것을,
+      // 키만 보면 다른 이름으로 담아 보내는 것을 놓친다.
+      if (/"school"|학교/.test(blob)) bad.push(label + ': 응답에 학교가 있다');
+    });
+    return bad.length === 0 || bad.join(' / ');
   });
 }
 
@@ -851,13 +884,17 @@ section('★ 가입 3분류 — 성도(member) (v1.2)');
       kind: 'student', name: '새학생', extra: '중1-3', school: '혜림중학교', code: 'hyerim2026',
     });
     if (!r.ok) return JSON.stringify(r);
+    if (JSON.stringify(r).indexOf('혜림중학교') >= 0) return 'register 응답에 학교가 되돌아왔다';
     const data = h.sheet('MEMBERS_학생').data;
     const headers = data[0];
     const row = data[data.length - 1];
     if (headers.indexOf('학교') < 0) return '학교 열이 없다';
-    return eq(String(row[headers.indexOf('학교')]), '혜림중학교', '학교') ||
-      eq(String(row[headers.indexOf('학년반')]), '중1-3', '학년반') ||
-      eq(String(row[headers.indexOf('active')]), 'TRUE', 'active');
+    return all(
+      eq(String(row[headers.indexOf('학교')]), '혜림중학교', '학교'),
+      eq(String(row[headers.indexOf('학년반')]), '중1-3', '학년반'),
+      eq(String(row[headers.indexOf('이름')]), '새학생', '이름'),
+      eq(String(row[headers.indexOf('active')]), 'TRUE', 'active')
+    );
   });
 
   t('★ 학부모·성도가 school을 보내도 어디에도 저장되지 않는다', () => {
@@ -909,6 +946,63 @@ section('★ 가입 3분류 — 성도(member) (v1.2)');
 }
 
 {
+  // 계약 §4.2가 명문화한 규칙(권한 판정은 명부 조회 결과로만 한다)을 고정한다.
+  // 지금 canUsePrayers_는 auth.kind만 보지만, 누군가 body.kind를 참조하도록
+  // «최적화»해도 이 테스트가 없으면 아무것도 실패하지 않는다.
+  t('★ 성도가 kind/role을 위조해 보내도 기도 액션은 forbidden (불변식 1)', () => {
+    const h = createHarness(seedBase());
+    const forged = { idToken: tok(MEMBER), kind: 'student', role: 'teacher', email: STUDENT };
+    const calls = [
+      { action: 'getMyPrayers' },
+      { action: 'addPrayer', text: '위조 시도' },
+      { action: 'setPrayerAnswered', id: 'x', answered: true },
+      { action: 'deletePrayer', id: 'x' },
+    ];
+    const bad = calls
+      .map((c) => Object.assign({}, forged, c))
+      .filter((c) => h.callAction(c).code !== 'forbidden')
+      .map((c) => c.action);
+    return bad.length === 0 || '위조가 통한 액션: ' + bad.join(', ');
+  });
+
+  // kindLabel_의 throw는 «조용한 오분류 금지» 장치다. 지금은 lookupMember가
+  // 4개 리터럴만 만들어 도달 경로가 없으므로, 직접 불러서 동작을 고정한다.
+  // 폴백으로 되돌리면(예: return '학생') 이 테스트가 실패한다.
+  t('★ kindLabel_은 미지 kind에 throw한다 («학생»으로 위조하지 않는다)', () => {
+    const h = createHarness(seedBase());
+    const fn = h.context.kindLabel_;
+    if (typeof fn !== 'function') return 'kindLabel_이 없다';
+    const known = all(
+      eq(fn('student'), '학생', 'student'),
+      eq(fn('parent'), '학부모', 'parent'),
+      eq(fn('teacher'), '교사', 'teacher'),
+      eq(fn('member'), '성도', 'member')
+    );
+    if (known !== true) return known;
+    const bad = ['ghost', '', null, undefined].filter((k) => {
+      try { fn(k); return true; } catch (e) { return false; }
+    });
+    return bad.length === 0 || 'throw하지 않은 kind: ' + JSON.stringify(bad);
+  });
+
+  // 하네스는 «MEMBERS_성도 시트가 아직 없는 상태»(setupAll 미실행)를 재현할 수
+  // 있게 만들어 두었는데, 정작 그 상태를 쓰는 테스트가 없었다. 배포 순서상
+  // 실제로 열릴 수 있는 창이므로 여기서 고정한다.
+  t('★ 성도 시트가 없어도 register(member)가 시트를 만들며 성공한다', () => {
+    const h = createHarness(seedBase({ members: undefined, registerCode: 'hyerim2026' }));
+    const r = h.callAction({
+      action: 'register', idToken: tok('firstmember@example.com'),
+      kind: 'member', name: '첫성도', extra: '한나전도회', code: 'hyerim2026',
+    });
+    if (!r.ok) return JSON.stringify(r);
+    const data = h.sheet('MEMBERS_성도').data;
+    if (!data || data.length < 2) return '성도 시트에 행이 생기지 않았다';
+    return all(
+      eq(data[0].join('|'), HEADERS.MEMBERS_MEMBER.join('|'), '헤더'),
+      eq(String(data[1][data[0].indexOf('소속전도회')]), '한나전도회', '소속전도회')
+    );
+  });
+
   t('★ 우선순위 전수 — 교사 › 학부모 › 학생 › 성도', () => {
     const dup = (email) => [{ email: email, 이름: '겹침', 소속전도회: 'x', active: 'TRUE', 가입시각: '2026-03-01', 가입경로: 'self' }];
     const cases = [
