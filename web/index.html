@@ -9,6 +9,17 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="stylesheet" href="css/app.css">
+<script>
+// ★ 설치 이벤트를 «모듈보다 먼저» 잡아 둔다.
+//    js/app.js는 type="module"이라 암묵적 defer다. 캐시된 재방문에서는
+//    beforeinstallprompt가 모듈 평가 전에 발화해서, 그때 등록하면 놓친다
+//    (안내가 «떴다 안 떴다» 하는 원인이 된다 — GIS에서 이미 겪은 함정과 같은 종류).
+//    preventDefault를 해야 크롬 자체 배너 대신 우리 안내를 쓸 수 있다.
+window.addEventListener('beforeinstallprompt', function (e) {
+  e.preventDefault();
+  window.__bip = e;
+});
+</script>
 </head>
 <body>
 
@@ -33,6 +44,14 @@
           <button type="button" id="inapp-open" class="btn primary">브라우저로 열기</button>
           <button type="button" id="inapp-copy" class="btn ghost">주소 복사</button>
         </div>
+      </div>
+
+      <!-- 앱으로 설치하기 안내 (2026-07-31 요청). 설치할 수 있는 환경에서만 뜬다.
+           카카오톡 안에서는 설치가 불가능하므로 위의 «브라우저로 열기»만 보인다. -->
+      <div id="install-banner" class="install-banner" hidden>
+        <p class="install-title"></p>
+        <p class="install-desc"></p>
+        <button type="button" id="install-go" class="btn primary" hidden></button>
       </div>
 
       <div class="cover-features">
@@ -67,12 +86,12 @@
            "학부모 가입인데 학교 입력 이런 거 안 뜨게") -->
       <div class="kind-choices">
         <button type="button" class="kind-btn" id="reg-kind-student">
-          <span class="kind-title">우리반 학생</span>
-          <span class="kind-desc">황규일 교사반 학생</span>
+          <span class="kind-title">황규일교사반 학생</span>
+          <span class="kind-desc">청소년부 학생</span>
         </button>
         <button type="button" class="kind-btn" id="reg-kind-parent">
-          <span class="kind-title">우리반 학부모</span>
-          <span class="kind-desc">황규일 교사반 학부모</span>
+          <span class="kind-title">황규일교사반 학부모</span>
+          <span class="kind-desc">청소년부 학생의 학부모</span>
         </button>
         <button type="button" class="kind-btn" id="reg-kind-member">
           <span class="kind-title">혜림교회 성도</span>
@@ -103,6 +122,13 @@
     </div>
 
     <p id="reg-error" class="register-error" role="alert"></p>
+    <!-- 가입 화면에도 같은 안내를 둔다 — 요청 원문이 «가입고 로그인시»였다.
+         내용은 로그인 화면과 같고, app.js가 두 자리를 함께 채운다. -->
+    <div id="install-banner-reg" class="install-banner" hidden>
+      <p class="install-title"></p>
+      <p class="install-desc"></p>
+      <button type="button" id="install-go-reg" class="btn primary" hidden></button>
+    </div>
     <button class="btn primary block" id="reg-submit">등록하고 시작하기</button>
     <button class="btn ghost block" id="reg-cancel">다른 계정으로 로그인</button>
   </section>
