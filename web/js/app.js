@@ -8,6 +8,7 @@ import { state, resetUserData, isTeacher, bumpGeneration } from './state.js';
 import * as S from './stats.js';
 import { loadMyData } from './load.js';
 import { el, escapeHtml, toast, closeSheet } from './ui.js';
+import { detectInApp, externalOpenUrl } from './inapp.js';
 
 import * as viewToday from './view-today.js';
 import * as viewCalendar from './view-calendar.js';
@@ -54,41 +55,62 @@ function show(screen) {
 // ---------------------------------------------------------------------------
 
 /**
- * 이 탭에서 앱이 몇 번째로 «처음부터» 시작됐는지.
+ * 카카오톡 등 «앱 안의 브라우저»로 열었을 때 안내를 띄운다.
  *
- * 로그인 뒤에 이 숫자가 올라가 있으면, 화면이 되돌아간 것이 아니라
- * **브라우저가 페이지를 새로 읽은 것**이다. 모바일에서 로그인 창을 다녀오는
- * 사이 원래 탭이 버려지면 이런 일이 생기고, 그러면 메모리에만 있던 로그인
- * 정보가 함께 사라져 로그인 화면으로 «돌아온 것처럼» 보인다.
- * 이 둘은 고치는 방법이 완전히 다르므로 구분할 수단이 필요하다.
- *
- * 저장소(localStorage/sessionStorage)는 쓰지 않는다 — 이 앱은 어떤 사용자 데이터도
- * 기기에 남기지 않으며, 그 규칙은 npm test가 강제한다. 대신 탭 수명 동안만
- * 유지되는 window.name에 숫자 하나만 둔다(사용자 데이터가 아니다).
+ * 그 안에서는 구글 로그인 창을 다녀오는 사이 이 페이지가 통째로 다시 읽히고,
+ * 메모리에만 두는 로그인 정보가 함께 사라진다. 그래서 로그인이 «되지 않는
+ * 것»처럼 보인다 — 2026-07-31 실사용 신고의 실제 원인이었다.
+ * 토큰을 기기에 저장하면 증상은 없어지지만, 한 휴대폰을 가족이 공유하는
+ * 이 앱에서는 앞사람 기록이 뒷사람에게 새는 문이 된다(보안 불변식 7).
+ * 그래서 저장하지 않고 바깥 브라우저로 열도록 안내한다.
  */
-function appStartCount() {
-  try {
-    const PREFIX = 'godly-start-';
-    const cur = String(window.name || '');
-    const prev = cur.indexOf(PREFIX) === 0 ? Number(cur.slice(PREFIX.length)) : 0;
-    const n = (isFinite(prev) && prev > 0 ? prev : 0) + 1;
-    window.name = PREFIX + n;
-    return n;
-  } catch (e) {
-    return 0; // 판정 불가
+function setupInAppBanner() {
+  const banner = el('#inapp-banner');
+  if (!banner) return;
+
+  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+  const kind = detectInApp(ua);
+  if (!kind) { banner.hidden = true; return; }
+
+  banner.hidden = false;
+  const here = location.href;
+  const openUrl = externalOpenUrl(kind, here, ua);
+  const openBtn = el('#inapp-open');
+  const copyBtn = el('#inapp-copy');
+
+  if (openUrl) {
+    openBtn.hidden = false;
+    openBtn.onclick = function () { location.href = openUrl; };
+  } else {
+    // iOS의 일부 인앱 웹뷰는 표준적인 전환 수단이 없다 — 복사만 안내한다.
+    openBtn.hidden = true;
   }
+
+  copyBtn.onclick = function () {
+    const done = function () { toast('주소를 복사했어요. 크롬·사파리에 붙여넣어 주세요.'); };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(here).then(done, function () { promptCopy(here); });
+        return;
+      }
+    } catch (e) { /* 아래 폴백 */ }
+    promptCopy(here);
+  };
 }
-const APP_STARTS = appStartCount();
+
+/** 클립보드를 못 쓰는 환경 — 주소를 골라 복사할 수 있게 보여 준다. */
+function promptCopy(url) {
+  try { window.prompt('이 주소를 복사해 크롬·사파리에서 열어 주세요.', url); }
+  catch (e) { toast('주소: ' + url); }
+}
 
 function renderLogin() {
   closeSheet();
   show('screen-login');
+  setupInAppBanner();
   const holder = el('#gis-button');
   holder.innerHTML = '';
   auth.initGis(holder, afterSignIn);
-  if (APP_STARTS > 1) {
-    el('#login-notice').textContent = '앱 시작 #' + APP_STARTS;
-  }
 }
 
 async function afterSignIn() {

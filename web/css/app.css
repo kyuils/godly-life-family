@@ -272,11 +272,12 @@
       font-family:'Noto Serif KR', serif;
       font-size:clamp(28px, 8.4vw, 32px);line-height:1.18;font-weight:600;letter-spacing:-0.01em;
     }
-    .cover-sub{margin:14px 0 0;color:#A09D96;word-break:keep-all;font-size:16px;line-height:1.5}
-
     /* 크림 바디 */
     .cover-body{flex:1;display:flex;flex-direction:column;padding:28px 24px calc(env(safe-area-inset-bottom) + 24px)}
-    .cover-features{display:flex;flex-direction:column;gap:18px}
+    /* 검은 표지 박스와 기능 목록이 맞붙어 보이던 것을 띄운다 (2026-07-31 요청).
+       hero의 padding-bottom은 «박스 안쪽» 여백이라 바깥 간격이 되지 못한다. */
+    .cover-features{display:flex;flex-direction:column;gap:18px;margin-top:28px}
+    #inapp-banner{margin-top:24px}
     .feat-row{display:flex;align-items:center;gap:14px}
     .feat-icon{
       flex-shrink:0;width:44px;height:44px;border-radius:12px;
