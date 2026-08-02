@@ -411,6 +411,16 @@ async function submitRegister() {
 
   btn.disabled = true; // 더블 서브밋 방지
   el('#reg-error').textContent = '';
+
+  // ★ 가입도 «로그인 흐름»이다 — 계약 §6.5의 규칙을 똑같이 따른다.
+  //   세대를 **첫 요청 이전에** 잡아 register와 loadMyData에 모두 넘긴다.
+  //   빠뜨리면 가입 요청 도중 다른 계정의 자격증명이 도착했을 때
+  //   이 흐름의 남은 요청이 **남의 토큰**으로 나가고, 두 흐름이 각자
+  //   renderApp()까지 달려 «헤더에 누구 이름이 남는지»가 순서에 좌우된다.
+  //   (2026-08-02 검토자 에이전트가 실행으로 재현한 결함)
+  const epoch = api.getSessionEpoch();
+  const stale = function () { return api.getSessionEpoch() !== epoch; };
+
   try {
     const res = await api.call('register', {
       name: el('#reg-name').value,
@@ -419,7 +429,9 @@ async function submitRegister() {
       // 학교는 학생일 때만 보낸다. 서버도 다른 kind가 보내면 무시한다(이중 방어).
       school: regKind === 'student' ? el('#reg-school').value : '',
       code: el('#reg-code').value,
-    });
+    }, { epoch: epoch });
+    // 다른 계정으로 갈아탔다면 이 화면을 그리지 않는다 — 새 흐름이 이미 그리고 있다.
+    if (stale()) return;
     if (!res.ok) {
       // 로그인 화면과 같은 이유로 코드를 병기한다 — 비개발자 운영자가 화면만 보고
       // docs/ops의 «이럴 때는» 표를 찾아갈 수 있어야 한다. 가입 화면만 빠져 있었다.
@@ -427,7 +439,10 @@ async function submitRegister() {
       return;
     }
     state.session = res;           // register 성공 응답은 whoami와 같은 형태
-    const loaded = await loadMyData(auth.todayStr(), api.getSessionEpoch());
+    // ★ 여기서 getSessionEpoch()를 다시 읽으면 안 된다 — register를 기다리는
+    //   사이 계정이 바뀌었다면 **바뀐 뒤의 세대**를 잡아 보호가 무력화된다.
+    const loaded = await loadMyData(auth.todayStr(), epoch);
+    if (stale()) return;
     // ★ 가입은 이미 **성공**했다. 여기서 failToLogin을 그대로 쓰면
     //   「등록되지 않은 계정입니다」가 떠서, 명부에 올라간 사람이 가입에 실패한 줄 안다.
     //   그래서 «가입은 끝났다»를 먼저 말하는 전용 경로를 쓴다.
@@ -500,10 +515,17 @@ function failToLogin(code, opts) {
     el('#login-notice').textContent = '다시 불러오는 중...';
     btn.disabled = true;
     // 토큰은 아직 살아 있다 — 전체 재로그인 없이 로드만 다시 시도한다.
-    Promise.resolve(afterSignIn()).catch(function () {
-      btn.disabled = false;
-      el('#login-notice').textContent = '여전히 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
-    });
+    Promise.resolve(afterSignIn())
+      .catch(function () {
+        el('#login-notice').textContent = '여전히 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+      })
+      // ★ 성공했다면 화면이 이미 바뀌어 이 버튼은 보이지 않는다. 실패해서 이 화면이
+      //   남아 있다면 **반드시 다시 누를 수 있어야 한다.**
+      //   예전에는 catch에서만 풀어서, whoami가 network_error로 실패하는 경로
+      //   (휴대폰 회선이 흔들릴 때 가장 흔하다)에서 버튼이 disabled인 채 남았다.
+      //   회선이 복구돼도 눌리지 않아 새로고침 말고는 회복 수단이 없었다
+      //   (2026-08-02 검토자 에이전트가 재현한 막다른 길).
+      .then(function () { btn.disabled = false; });
   };
   holder.appendChild(btn);
 
@@ -677,22 +699,29 @@ function showUnexpected(what) {
   const login = document.getElementById('screen-login');
   const loading = document.getElementById('screen-loading');
 
-  // ★ 로그인 진행 중(로딩 화면)에 터진 오류를 그대로 두면 도는 원 안에 갇힌다.
-  //   로딩 화면에는 문구를 놓을 자리가 없으므로 로그인 화면으로 되돌린 뒤 남긴다.
-  //   (이 분기가 없으면 아래 «login.hidden이면 반환»에 걸려 오류가 조용히 사라진다)
-  if (loading && !loading.hidden) {
-    clearLoading();
-    // ★ 세대를 함께 올린다. 잠금만 풀면 진행 중이던 흐름이 «버려지지 않은 채»
-    //   살아 있어서, 새 흐름과 둘이 동시에 달리게 된다 (2026-08-02 검토 지적).
-    signInSeq += 1;
-    signingIn = false;
-    signingInEmail = null;
-    show('screen-login');
-  } else if (login && login.hidden) {
-    return; // 앱 화면이 정상히 떠 있으면 건드리지 않는다
-  }
-  notice.textContent = '예기치 못한 오류가 났습니다. 이 문구를 담임교사에게 알려 주세요. ' +
+  // ★ 로그인 진행 중(로딩 화면)이면 **흐름을 건드리지 않는다.**
+  //
+  //   이 핸들러는 window의 모든 error/unhandledrejection을 받는다 — 확장프로그램
+  //   오류처럼 로그인과 아무 상관 없는 것까지 들어온다. 그런데 여기서 흐름을
+  //   버리거나 화면을 갈아엎으면, **멀쩡히 진행 중이던 로그인이 취소되어**
+  //   「로그인을 두 번 해야 한다」가 되살아난다. 그건 v1.4.0이 고친 바로 그 신고다.
+  //   (2026-08-02 검토자 에이전트가 돌연변이 대조로 잡아낸 회귀)
+  //
+  //   대신 «갇히지 않게»만 보장한다: 오류 문구를 로딩 화면에 띄우고,
+  //   20초를 기다리지 않고 탈출 버튼을 **즉시** 내준다.
+  //   흐름이 정상이면 그대로 앱으로 넘어가고, 정말 죽었으면 사용자가 빠져나온다.
+  const msg = '예기치 못한 오류가 났습니다. 이 문구를 담임교사에게 알려 주세요. ' +
     '[' + String(what).slice(0, 160) + ']';
+
+  if (loading && !loading.hidden) {
+    const desc = document.getElementById('loading-desc');
+    if (desc) desc.textContent = msg;
+    const back = document.getElementById('loading-back');
+    if (back) back.hidden = false;
+    return;
+  }
+  if (login && login.hidden) return; // 앱 화면이 정상히 떠 있으면 건드리지 않는다
+  notice.textContent = msg;
 }
 
 window.addEventListener('error', function (e) {

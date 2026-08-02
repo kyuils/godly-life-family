@@ -921,14 +921,50 @@ check('★ 로그인 흐름은 첫 요청 전에 세대를 잡는다 (계약 §6
   const app = codeOnly(read(path.join(JS, 'app.js')));
   const body = fnBodyOf(app, 'afterSignIn');
   if (!body) return 'afterSignIn을 찾지 못함';
-  const atEpoch = body.indexOf('api.getSessionEpoch()');
+  // submitRegister 쪽과 같은 이유로 «대입»을 본다 (아래 주석 참조).
+  const atEpoch = body.search(/const\s+epoch\s*=\s*api\.getSessionEpoch\(\)/);
   const atAwait = body.indexOf('await ');
-  if (atEpoch < 0) return 'afterSignIn이 세대를 잡지 않는다';
+  if (atEpoch < 0) return 'afterSignIn의 epoch가 api.getSessionEpoch()에서 나오지 않는다';
   if (atAwait >= 0 && atEpoch > atAwait) {
     return '세대를 첫 await 뒤에 잡는다 — 이미 다른 계정으로 바뀐 뒤일 수 있다';
   }
   // [^)]* 로 쓰면 안 된다 — 인자로 들어가는 auth.todayStr()의 닫는 괄호에서 멈춘다.
-  return /loadMyData\([^;]*epoch/.test(body) || 'loadMyData에 세대를 넘기지 않는다';
+  if (!/loadMyData\([^;]*epoch/.test(body)) return 'afterSignIn이 loadMyData에 세대를 넘기지 않는다';
+
+  // ★ 가입도 같은 규칙을 따라야 한다. 예전에는 이 검사가 afterSignIn만 봐서,
+  //   submitRegister가 규칙 밖에 있는 것을 잡지 못했다
+  //   (2026-08-02 검토자 에이전트가 실행으로 재현).
+  const reg = fnBodyOf(app, 'submitRegister');
+  if (!reg) return 'submitRegister를 찾지 못함';
+  // ★ «어딘가에 getSessionEpoch가 있는가»로는 부족하다 — stale() 같은 헬퍼가
+  //   그 낱말을 갖고 있으면, 정작 넘기는 값을 undefined로 바꿔도 통과한다.
+  //   (api.call은 epoch가 undefined면 검사를 통째로 건너뛴다 → 방어가 꺼진다)
+  //   **세대 변수가 실제로 getSessionEpoch()에서 나오는지** 본다.
+  const rEpoch = reg.search(/const\s+epoch\s*=\s*api\.getSessionEpoch\(\)/);
+  const rAwait = reg.indexOf('await ');
+  if (rEpoch < 0) return 'submitRegister의 epoch가 api.getSessionEpoch()에서 나오지 않는다';
+  if (rAwait >= 0 && rEpoch > rAwait) {
+    return 'submitRegister가 세대를 첫 await 뒤에 잡는다 — 이미 계정이 바뀐 뒤일 수 있다';
+  }
+  // register 호출과 loadMyData **둘 다** 세대를 받아야 한다.
+  // ★ /api\.call\('register'[\s\S]*?epoch/ 로 쓰면 안 된다 — 호출 인자에서 세대를
+  //   빼도 함수 뒷부분의 loadMyData(…, epoch)에 걸려 통과한다(돌연변이 검증에서 발견).
+  //   **그 호출의 인자 범위 안**만 본다.
+  const at = reg.indexOf("api.call('register'");
+  if (at < 0) return "submitRegister에서 api.call('register')를 찾지 못함";
+  const end = reg.indexOf(');', at);
+  const regCall = end < 0 ? reg.slice(at) : reg.slice(at, end);
+  if (!/epoch/.test(regCall)) return 'register 호출에 세대를 넘기지 않는다';
+  if (!/loadMyData\([^;]*epoch\s*\)/.test(reg)) return 'submitRegister가 loadMyData에 세대를 넘기지 않는다';
+  // ★ 요청에 «그 자리에서 다시 읽은» 세대를 넘기면 보호가 무의미하다 —
+  //   기다리는 사이 계정이 바뀌었다면 바뀐 뒤의 세대를 잡게 된다.
+  //   («지금 세대가 처음과 다른가»를 비교하려고 다시 읽는 것은 정상이므로,
+  //    호출 횟수를 세는 대신 **요청 인자로 들어가는지**만 본다)
+  if (/loadMyData\([^;]*getSessionEpoch/.test(reg) ||
+      /api\.call\('register'[\s\S]*?\}\s*,\s*\{[^}]*getSessionEpoch/.test(reg)) {
+    return 'submitRegister가 요청에 세대를 그 자리에서 다시 읽어 넘긴다';
+  }
+  return true;
 });
 
 check('★ 나중에 온 구글 계정이 이긴다 (계약 §6.5)', () => {
@@ -963,13 +999,26 @@ check('★ 버려진 흐름이 정상 화면 위에 오류를 덧씌우지 않�
   return m || 'loadMyData 뒤에서 버려짐 검사가 failToLogin보다 먼저 오지 않는다';
 });
 
-check('★ showUnexpected가 흐름을 버린다 (잠금만 풀지 않는다)', () => {
+check('★ 무관한 오류가 진행 중인 로그인을 취소하지 않는다', () => {
+  // showUnexpected는 window의 **모든** error/unhandledrejection을 받는다
+  // (확장프로그램 오류 포함). 여기서 흐름을 버리거나 화면을 갈아엎으면
+  // 멀쩡한 로그인이 취소되어 「두 번 로그인해야 한다」가 되살아난다 —
+  // v1.4.0이 고친 바로 그 신고다. 대신 «갇히지 않게»만 보장한다.
   const app = codeOnly(read(path.join(JS, 'app.js')));
   const body = fnBodyOf(app, 'showUnexpected');
   if (!body) return 'showUnexpected를 찾지 못함';
-  if (!/signingIn\s*=\s*false/.test(body)) return true; // 잠금을 안 풀면 이 규칙은 해당 없음
-  return /signInSeq\s*\+=\s*1/.test(body) ||
-    '잠금만 풀고 세대를 안 올린다 — 살아 있는 옛 흐름과 새 흐름이 함께 달린다';
+  const touches = [
+    [/signInSeq/, '흐름 세대(signInSeq)'],
+    [/signingIn\s*=/, '진행 중 잠금(signingIn)'],
+    [/show\('screen-login'\)/, '화면 전환(show)'],
+  ].filter(([re]) => re.test(body)).map(([, name]) => name);
+  if (touches.length) {
+    return 'showUnexpected가 로그인 흐름을 건드린다: ' + touches.join(', ') +
+      ' — 무관한 오류 하나로 정상 로그인이 취소된다';
+  }
+  // 대신 갇히지 않을 출구는 반드시 있어야 한다.
+  return /loading-back/.test(body) ||
+    '로딩 화면에서 탈출 버튼을 내주지 않는다 — 오류가 나면 그 화면에 갇힌다';
 });
 
 check('★ 분류를 바꾸면 가운데 칸을 비운다 (가입 검토 ①)', () => {
@@ -1036,6 +1085,18 @@ check('★ 분류 선택 상태가 보조기기에 전달된다 (가입 검토 �
   if (btns !== 3) return '분류 버튼 3개 중 aria-pressed 초기값이 있는 것은 ' + btns + '개';
   const body = fnBodyOf(app, 'setKind');
   return (body && /aria-pressed/.test(body)) || 'setKind가 aria-pressed를 갱신하지 않는다';
+});
+
+check('★ «다시 시도» 버튼이 영구 비활성으로 죽지 않는다', () => {
+  // whoami가 EXPIRED가 아닌 코드(network_error 등)로 실패하면 #gis-button 홀더를
+  // 다시 그리지 않는다. 그때 catch에서만 버튼을 풀면 disabled인 채로 남아
+  // 회선이 복구돼도 눌리지 않는다 — 새로고침 말고 회복 수단이 없다.
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  const body = fnBodyOf(app, 'failToLogin');
+  if (!body) return 'failToLogin을 찾지 못함';
+  if (!/btn\.disabled\s*=\s*true/.test(body)) return true; // 비활성화하지 않으면 해당 없음
+  return /\.then\(function \(\) \{ btn\.disabled = false; \}\)/.test(body) ||
+    '재시도 버튼을 성공·실패 양쪽에서 풀지 않는다 (catch에서만 풀면 막다른 길이 된다)';
 });
 
 check('★ 오류가 없으면 가입 화면의 붉은 상자가 보이지 않는다 (가입 검토 ⑥)', () => {
