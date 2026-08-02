@@ -320,6 +320,56 @@ await t('★ 로그아웃도 세대를 올려 진행 중이던 흐름을 끊는�
   return sentTokens.length === 0 || '로그아웃 뒤에 요청이 나갔다';
 });
 
+// ★★ 2026-08-02 검토자 에이전트가 재현으로 잡은 [중대] 결함의 회귀 테스트.
+//
+// 세대 검사가 **함수 진입 시 1회뿐**이면 busy 재시도(1초·3초 대기)가 그 검사를
+// 통째로 우회한다. 위의 «흐름 도중 계정이 바뀌면» 테스트는 재시도를 한 번도
+// 태우지 않아 **통과하면서도 이 구멍을 놓쳤다** — 결함과 같은 모양의 구멍이
+// 테스트에도 있었다. 그래서 여기서는 busy를 일부러 만들어 재시도를 태운다.
+await t('★★ busy 재시도 중 계정이 바뀌어도 남의 토큰으로 재전송하지 않는다', async () => {
+  api.clearSession();
+  api.setSession('a@example.com', 'tok:A');
+  const epoch = api.getSessionEpoch();
+
+  sentTokens.length = 0;
+  // 첫 응답은 busy — 재시도 루프에 진입한다.
+  nextResponse = { ok: false, code: 'busy' };
+  const p = api.call('register', { name: 'A가입력한이름', kind: 'student' }, { epoch: epoch });
+
+  // 백오프(1초) 대기 중에 다른 계정의 콜백이 도착해 전역 토큰이 B로 바뀐다.
+  await new Promise(function (r) { setTimeout(r, 200); });
+  api.setSession('b@example.com', 'tok:B');
+  nextResponse = { ok: true, email: 'b@example.com' };   // 재전송이 나가면 «성공»해 버린다
+
+  const res = await p;
+
+  // ★ 핵심 — 재전송이 **나가지 않아야** 한다. 나갔다면 이미 시트에 B가 등재됐다.
+  if (sentTokens.indexOf('tok:B') >= 0) {
+    return 'B 계정 토큰으로 재전송됐다 (보낸 토큰: ' + JSON.stringify(sentTokens) + ')';
+  }
+  if (res.ok) return '세대가 어긋났는데 성공을 돌려줬다';
+  return res.code === 'stale_session' || '코드가 stale_session이 아니다: ' + res.code;
+});
+
+await t('★★ 같은 계정이면 busy 재시도가 정상적으로 이어진다 (위 방어의 과잉 차단 방지)', async () => {
+  api.clearSession();
+  api.setSession('a@example.com', 'tok:A');
+  const epoch = api.getSessionEpoch();
+
+  sentTokens.length = 0;
+  nextResponse = { ok: false, code: 'busy' };
+  const p = api.call('getMyRecords', { months: ['2026-08'] }, { noCache: true, epoch: epoch });
+  await new Promise(function (r) { setTimeout(r, 200); });
+  // 같은 사람의 새 토큰 — 끊으면 안 된다.
+  api.setSession('a@example.com', 'tok:A2');
+  nextResponse = { ok: true, rows: [] };
+
+  const res = await p;
+  if (!res.ok) return '같은 계정인데 재시도가 끊겼다: ' + res.code;
+  return sentTokens.length >= 2 || '재시도가 실제로 일어나지 않아 검사가 무의미하다: ' +
+    JSON.stringify(sentTokens);
+});
+
 await t('세대를 안 넘기면 예전처럼 그대로 동작한다 (하위호환)', async () => {
   api.clearSession();
   api.setSession('a@example.com', 'tok:A');

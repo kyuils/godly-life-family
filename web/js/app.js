@@ -222,6 +222,19 @@ function onCredential(email) {
 
 let loadingTimer = null;
 
+// 이 흐름에서 탈출구를 이미 내줬는가.
+// ★ 한 번 내준 탈출구는 도로 거두지 않는다 (2026-08-02 검토자 에이전트 지적).
+//   showLoading은 한 흐름에서 **두 번** 불린다(«확인 중» → «불러오는 중»).
+//   무조건 감추면, showUnexpected가 오류 때문에 즉시 내준 버튼이 다음 단계에서
+//   도로 사라지고 20초 타이머까지 다시 시작되어 최악 40초를 기다리게 된다.
+let escapeOffered = false;
+
+function offerEscape() {
+  escapeOffered = true;
+  const back = el('#loading-back');
+  if (back) back.hidden = false;
+}
+
 function showLoading(message) {
   show('screen-loading');
   el('#loading-desc').textContent = message;
@@ -229,7 +242,6 @@ function showLoading(message) {
   // 서버가 끝내 응답하지 않을 때 이 화면에 갇히지 않도록 탈출구를 둔다.
   // 처음부터 보이면 «눌러야 하나?» 하고 진행 중인 로그인을 스스로 끊게 되므로 늦게 낸다.
   const back = el('#loading-back');
-  back.hidden = true;
   back.onclick = function () {
     // ★ 진행 중이던 흐름을 «버린다»고 표시한다.
     //   fetch는 취소되지 않으므로, 늦게 도착한 응답이 renderApp()을 불러
@@ -243,12 +255,15 @@ function showLoading(message) {
     clearLoading();
     backToLogin('');
   };
+  if (escapeOffered) return;   // 이미 내준 탈출구는 감추지도, 타이머를 되돌리지도 않는다
+  back.hidden = true;
   if (loadingTimer) clearTimeout(loadingTimer);
-  loadingTimer = setTimeout(function () { back.hidden = false; }, 20000);
+  loadingTimer = setTimeout(offerEscape, 20000);
 }
 
 function clearLoading() {
   if (loadingTimer) { clearTimeout(loadingTimer); loadingTimer = null; }
+  escapeOffered = false;
 }
 
 // 로그인 흐름이 진행 중인지. 구글 콜백은 자동 로그인·버튼 클릭·One Tap에서
@@ -529,6 +544,20 @@ function failToLogin(code, opts) {
   };
   holder.appendChild(btn);
 
+  // ★ «다시 시도»만 두면 회복 불가능한 코드에서 막다른 골목이 된다
+  //   (2026-08-02 검토자 에이전트 지적).
+  //   실패 코드가 만료 계열(token_expired 등)이 **아니면**(unauthorized·forbidden·
+  //   deactivated·server_error) app:session-expired가 뜨지 않아 renderLogin()이
+  //   다시 불리지 않는다. 이 화면에는 구글 로그인 버튼이 없으므로 사용자는
+  //   «다시 시도 → 또 실패»만 반복할 수 있고, **로그아웃도 계정 전환도 못 한다.**
+  //   가족이 공용 휴대폰을 쓰는 이 앱에서는 뒷사람이 들어올 방법이 아예 없어진다
+  //   (계약 §7 — 로그아웃은 공용 기기에서 세션을 끊을 유일한 수단이다).
+  const other = document.createElement('button');
+  other.className = 'btn ghost block';
+  other.textContent = '다른 계정으로 로그인';
+  other.onclick = function () { auth.signOut(); };
+  holder.appendChild(other);
+
   const o = opts || {};
   const CAUSE = {
     network_error: '인터넷 연결을 확인해 주세요.',
@@ -716,8 +745,9 @@ function showUnexpected(what) {
   if (loading && !loading.hidden) {
     const desc = document.getElementById('loading-desc');
     if (desc) desc.textContent = msg;
-    const back = document.getElementById('loading-back');
-    if (back) back.hidden = false;
+    // offerEscape로 «내줬다»를 기록한다. 그냥 hidden만 벗기면 곧이어 오는
+    // showLoading이 도로 감춰 버린다.
+    offerEscape();
     return;
   }
   if (login && login.hidden) return; // 앱 화면이 정상히 떠 있으면 건드리지 않는다

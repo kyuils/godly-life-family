@@ -1017,8 +1017,40 @@ check('★ 무관한 오류가 진행 중인 로그인을 취소하지 않는다
       ' — 무관한 오류 하나로 정상 로그인이 취소된다';
   }
   // 대신 갇히지 않을 출구는 반드시 있어야 한다.
-  return /loading-back/.test(body) ||
-    '로딩 화면에서 탈출 버튼을 내주지 않는다 — 오류가 나면 그 화면에 갇힌다';
+  if (!/offerEscape\(\)/.test(body)) {
+    return '로딩 화면에서 탈출 버튼을 내주지 않는다(offerEscape 호출 없음) — 오류가 나면 그 화면에 갇힌다';
+  }
+
+  // ★ 여기까지는 «내주는가»만 본다. 예전에는 이 검사가 «loading-back이라는 글자가
+  //   있는가»뿐이어서, 내주자마자 showLoading이 도로 감추는 것을 놓쳤다
+  //   (2026-08-02 검토자 에이전트가 브라우저 재현으로 지적).
+  //   showLoading은 한 흐름에서 두 번 불리므로, «이미 내줬으면 감추지 않는다»가
+  //   함께 있어야 실제로 보장된다.
+  const offer = fnBodyOf(app, 'offerEscape');
+  if (!offer || !/escapeOffered\s*=\s*true/.test(offer)) {
+    return 'offerEscape가 «내줬다»를 기록하지 않는다';
+  }
+  const loading = fnBodyOf(app, 'showLoading');
+  if (!loading) return 'showLoading을 찾지 못함';
+  if (!/if\s*\(escapeOffered\)\s*return/.test(loading)) {
+    return 'showLoading이 escapeOffered를 보지 않는다 — 내준 탈출구를 다음 단계에서 도로 감춘다';
+  }
+  // 감추는 문장이 그 가드보다 **뒤에** 있어야 한다.
+  return loading.indexOf('if (escapeOffered) return') < loading.indexOf('back.hidden = true') ||
+    'back.hidden = true가 escapeOffered 가드보다 앞에 있다 — 가드가 무력하다';
+});
+
+check('★ 로드 실패 화면에 계정을 바꿀 수단이 있다 (막다른 골목 방지)', () => {
+  // 실패 코드가 만료 계열이 아니면(unauthorized·forbidden·deactivated·server_error)
+  // app:session-expired가 뜨지 않아 renderLogin()이 다시 불리지 않는다.
+  // 이 화면에는 구글 로그인 버튼이 없으므로 «다시 시도 → 또 실패»만 반복되고
+  // 로그아웃도 계정 전환도 못 한다. 공용 휴대폰에서 뒷사람이 들어올 방법이 없어진다.
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  const body = fnBodyOf(app, 'failToLogin');
+  if (!body) return 'failToLogin을 찾지 못함';
+  if (!/holder\.innerHTML\s*=\s*''/.test(body)) return true; // 버튼을 지우지 않는다면 해당 없음
+  return /signOut\(\)/.test(body) ||
+    '로그인 버튼을 지우면서 로그아웃·계정전환 수단을 두지 않았다 — 새로고침 말고 빠져나갈 길이 없다';
 });
 
 check('★ 분류를 바꾸면 가운데 칸을 비운다 (가입 검토 ①)', () => {

@@ -149,9 +149,10 @@ export async function call(action, params, opts) {
   //   호출부(load.js·app.js)에 두면 새 호출부가 하나 빠뜨리는 순간 결함이
   //   조용히 되살아난다. 토큰을 소유한 계층이 직접 지킨다.
   //   세대가 어긋나면 **요청을 보내지 않는다** — 보내는 순간 남의 토큰이 실린다.
-  if (options.epoch !== undefined && options.epoch !== sessionEpoch) {
-    return { ok: false, code: 'stale_session' };
-  }
+  const stale = function () {
+    return options.epoch !== undefined && options.epoch !== sessionEpoch;
+  };
+  if (stale()) return { ok: false, code: 'stale_session' };
 
   const useCache = READ_ACTIONS.has(action) && !options.noCache;
   const key = cacheKey(action, params);
@@ -164,6 +165,16 @@ export async function call(action, params, opts) {
   let result;
   const backoff = [1000, 3000];
   for (let attempt = 0; ; attempt++) {
+    // ★★ 재전송 직전에 **다시** 확인한다 (2026-08-02 검토자 에이전트가 재현으로 지적).
+    //   busy 백오프는 1~3초를 기다리는데, post()는 «보내는 순간»의 전역 토큰을 읽는다.
+    //   그 사이 다른 계정의 구글 콜백이 도착하면 재전송이 남의 토큰으로 나간다.
+    //   진입 시 한 번만 검사하면 이 경로가 그대로 열려 있다 — 함수 **안에서**
+    //   «한 곳이 빠진다»가 재현된 것이다.
+    //
+    //   읽기 액션은 뒤에서 loadMyData의 owner 검사가 한 번 더 거르지만,
+    //   **register는 쓰기라 그대로 시트에 남는다** — B 계정이 A가 입력한
+    //   이름·학년반·학교로 명부에 등재되고, 화면에는 아무 표시도 나지 않는다.
+    if (stale()) return { ok: false, code: 'stale_session' };
     result = await postSafe(action, params);
     // busy는 저녁 피크에 잠금 대기가 길어질 때 나온다 (계약 §4.2).
     if (result && result.code === 'busy' && attempt < backoff.length) {
