@@ -9,7 +9,7 @@
 //       커밋 전 반드시 null로 되돌린다 — scripts/check-web.mjs가 검사한다.
 
 export const APP_CONFIG = {
-  GAS_URL: 'https://script.google.com/macros/s/AKfycbxd2UmO5DaSsV3v3fC4DiRNXJTKopinclcWyC-RI0Qz8dcMEMJNb5_5FQi3_HuOSw1m/exec',
+  GAS_URL: 'https://script.google.com/macros/s/AKfycbzyJYXLClLcqfk2r8stYnoedSL5xM7wUIkZakwN463BKa_QZrFaaxaZeyrcEuEoaBPz/exec',
   OAUTH_CLIENT_ID: '780379219559-q58pofdfh8kjhcqb0a76qasbeo997k9a.apps.googleusercontent.com',
   MOCK: null,
 };

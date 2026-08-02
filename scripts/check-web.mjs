@@ -1167,6 +1167,32 @@ check('★ 시트 열 이름과 화면 문구의 불일치가 코드에 명시�
     '불일치가 의도임을 밝힌 주석이 없는 파일: ' + missing.join(', ');
 });
 
+check('★ 앱이 부르는 GAS 주소가 문서에 기록된 «현재 배포»와 같다', () => {
+  // 2026-08-02에 실제로 난 사고: 「배포 관리 → 수정 → 새 버전」이 아니라 「새 배포」를
+  // 누르면 **주소가 바뀐다.** 그러면 앱은 옛 서버를 계속 부르는데, 배포 화면은
+  // 성공한 것처럼 보이고 서버도 정상 응답하므로 겉으로는 아무 문제가 없어 보인다.
+  //
+  // 네트워크 없이 확인할 수 있는 것은 «config.js의 주소»와 «문서가 현재라고 적은 주소»가
+  // 일치하는가까지다. 그 이상(실제로 살아 있는가·어떤 build인가)은 사람이 브라우저로
+  // 확인해야 한다 — 정적 검사인 척하지 않는다.
+  const cfg = codeOnly(read(path.join(JS, 'config.js')));
+  const m = /GAS_URL:\s*'https:\/\/script\.google\.com\/macros\/s\/([^/']+)\/exec'/.exec(cfg);
+  if (!m) return 'config.js의 GAS_URL이 Apps Script 웹앱 주소 형식이 아니다';
+  const id = m[1];
+
+  const handoff = read(path.join(ROOT, 'docs', 'HANDOFF.md'));
+  // 문서는 앞부분만 적는다(전체를 적으면 옮겨 적다 틀리기 쉽다). 12자면 충분히 구분된다.
+  const head = id.slice(0, 12);
+  if (handoff.indexOf(head) < 0) {
+    return 'HANDOFF.md에 현재 배포 ID(' + head + '…)가 없다 — 배포를 바꾸고 문서를 안 고쳤거나, ' +
+      '「새 배포」로 주소가 바뀐 것을 모르고 있다';
+  }
+  // 옛 배포 ID가 config에 남아 있으면 안 된다.
+  const OLD = 'AKfycbxd2UmO5DaSs';
+  return id.indexOf(OLD) !== 0 ||
+    'config.js가 아직 옛 배포(' + OLD + '…)를 부른다 — 그쪽은 v1.2.0을 서빙한다';
+});
+
 check('소스에 제어문자가 리터럴로 박혀 있지 않다', () => {
   const bad = [];
   const dirs = [JS, path.join(WEB, 'css')];
