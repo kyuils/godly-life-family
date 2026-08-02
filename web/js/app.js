@@ -207,7 +207,15 @@ function showLoading(message) {
   const back = el('#loading-back');
   back.hidden = true;
   back.onclick = function () {
+    // ★ 진행 중이던 흐름을 «버린다»고 표시한다.
+    //   fetch는 취소되지 않으므로, 늦게 도착한 응답이 renderApp()을 불러
+    //   방금 돌아온 로그인 화면을 덮어쓰는 일이 실제로 생긴다.
+    //   loadMyData의 owner 검사로는 못 막는다 — 세션을 지운 것이 아니라
+    //   사용자가 화면만 되돌린 것이라 email이 그대로다.
+    //   (renderTab이 bumpGeneration/stale로 푸는 것과 같은 종류의 문제다)
+    signInSeq += 1;
     signingIn = false;          // 진행 중 표시를 풀어야 다시 로그인할 수 있다
+    clearLoading();
     backToLogin('');
   };
   if (loadingTimer) clearTimeout(loadingTimer);
@@ -223,19 +231,27 @@ function clearLoading() {
 // 늦게 끝난 쪽이 화면을 덮어쓴다.
 let signingIn = false;
 
+// 이 로그인 흐름의 세대. «돌아가기»로 흐름을 버릴 때 올린다.
+// 버려진 흐름은 응답이 뒤늦게 도착해도 화면을 건드리지 않는다.
+let signInSeq = 0;
+
 async function afterSignIn() {
   if (signingIn) return;
   signingIn = true;
+  const seq = ++signInSeq;
+  const abandoned = function () { return seq !== signInSeq; };
   try {
     // ★ try 안에서 부른다. 밖에 두면 여기서 예외가 났을 때 finally를 거치지 않아
     //   signingIn이 true로 잠긴 채 남고, 이후 모든 로그인 시도가 조용히 무시된다.
     showLoading('로그인 정보를 확인하고 있어요');
     const res = await api.call('whoami', {}, { noCache: true });
+    if (abandoned()) return;
 
     if (res.ok) {
       state.session = res;
       showLoading('기록을 불러오고 있어요');
       const loaded = await loadMyData(auth.todayStr());
+      if (abandoned()) return;
       if (!loaded.ok) { failToLogin(loaded.code); return; }
       renderApp();
       return;
@@ -256,8 +272,12 @@ async function afterSignIn() {
     el('#login-notice').textContent = api.errorMessage(res.code) + ' [' + res.code + ']';
   } finally {
     // 예외로 빠져나가도 반드시 푼다. 안 그러면 이후 모든 로그인 시도가 조용히 무시된다.
-    clearLoading();
-    signingIn = false;
+    // 단, **버려진 흐름은 새 흐름의 잠금을 풀면 안 된다** — 늦게 끝난 옛 요청이
+    // 방금 시작한 로그인의 진행 표시를 지워 버리면 두 흐름이 다시 겹친다.
+    if (!abandoned()) {
+      clearLoading();
+      signingIn = false;
+    }
   }
 }
 

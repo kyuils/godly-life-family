@@ -811,7 +811,16 @@ check('★ 로그인 흐름이 겹쳐 돌지 않는다 (신고 ①)', () => {
   // ★ 이 검사가 진짜다. finally가 없으면 예외 한 번에 이후 모든 로그인이
   //   조용히 무시된다 — 사용자에게는 «버튼을 눌러도 아무 반응이 없다»가 된다.
   const fin = /finally\s*\{[\s\S]*?signingIn\s*=\s*false/.test(body);
-  return fin || 'signingIn을 finally에서 풀지 않는다 — 예외가 나면 영영 잠긴다';
+  if (!fin) return 'signingIn을 finally에서 풀지 않는다 — 예외가 나면 영영 잠긴다';
+
+  // 20초 «돌아가기»로 흐름을 버려도 fetch는 취소되지 않는다. 늦게 도착한 응답이
+  // renderApp()을 불러 방금 돌아온 로그인 화면을 덮어쓰는 것을 막아야 한다.
+  // (loadMyData의 owner 검사로는 못 막는다 — 세션 email이 그대로다)
+  if (!/seq\s*=\s*\+\+\s*signInSeq/.test(body)) return 'afterSignIn이 흐름 세대(signInSeq)를 잡지 않는다';
+  const awaits = (body.match(/await\s/g) || []).length;
+  const guards = (body.match(/if\s*\(\s*abandoned\(\)\s*\)\s*return/g) || []).length;
+  return guards >= awaits ||
+    'await ' + awaits + '곳 중 버려짐 검사는 ' + guards + '곳뿐 — 버려진 흐름이 화면을 덮어쓴다';
 });
 
 check('★ 자동 로그인은 앱을 켤 때만 켠다 (신고 ② / 불변식 7)', () => {
@@ -826,8 +835,13 @@ check('★ 자동 로그인은 앱을 켤 때만 켠다 (신고 ② / 불변식 
     return 'auth.js가 auto_select를 항상 true로 박았다 — 로그아웃 뒤에도 자동 로그인된다';
   }
   if (!/auto_select\s*:\s*autoSelect/.test(auth)) return 'auth.js가 auto_select를 인자로 받지 않는다';
-  if (!/button_auto_select\s*:\s*autoSelect/.test(auth)) {
-    return 'button_auto_select가 autoSelect와 묶이지 않았다 — 로그아웃 뒤 계정 선택창이 뜨지 않는다';
+
+  // ★ button_auto_select는 켜면 안 된다 (계약 §6.4).
+  //   구글이 보장하는 조건이 auto_select와 다르다 — «승인된 계정이 하나뿐일 때»라는
+  //   단서가 없어서, 앞사람이 로그아웃하지 않고 앱을 닫았을 때 다음 사람이
+  //   **자기 계정으로 들어가려고 버튼을 눌러도** 계정 선택창 없이 앞사람 계정으로 들어간다.
+  if (/button_auto_select\s*:\s*(?!false)/.test(auth)) {
+    return 'button_auto_select를 켰다 — 공용 휴대폰에서 앞사람 계정으로 들어가는 문이 된다';
   }
   if (!/\.prompt\(\)/.test(auth)) return 'prompt() 호출이 없다 — initialize()만으로는 자동 로그인이 일어나지 않는다';
 

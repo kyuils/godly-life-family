@@ -116,12 +116,19 @@ function renderGisButton(container, autoSelect) {
       applyToken(email, resp.credential);
       onSignedIn();
     },
-    // 승인된 구글 세션이 하나뿐일 때 사용자 조작 없이 토큰을 돌려준다.
+    // 승인된 구글 세션이 **하나뿐일** 때만 사용자 조작 없이 토큰을 돌려준다.
+    // 이 «하나뿐» 조건이 공용 휴대폰에서 이 기능을 쓸 수 있게 하는 근거다:
+    // 가족 계정이 둘 이상이면 구글이 계정 선택창을 띄운다.
     auto_select: autoSelect,
-    // 버튼을 눌렀을 때도 계정 선택창을 건너뛴다(크롬 M125+/안드로이드 M128+).
-    // autoSelect와 **같은 값**으로 묶는다 — 로그아웃 뒤에는 계정 선택창이 떠야
-    // 가족 중 다른 사람이 자기 계정으로 들어갈 수 있다.
-    button_auto_select: autoSelect,
+    // ★ button_auto_select는 **켜지 않는다.**
+    //   구글 문서가 보장하는 조건이 auto_select와 다르다 — 「활성 세션이 있는
+    //   재방문자를 계정 선택창 없이 로그인시킨다」이고 «계정이 하나뿐일 때»라는
+    //   단서가 없다. 그러면 이런 일이 생긴다:
+    //     엄마가 로그아웃하지 않고 앱을 닫는다 → 아이가 **자기 계정으로 들어가려고
+    //     로그인 버튼을 직접 누른다** → 계정 선택창 없이 엄마 계정으로 들어간다.
+    //   로그아웃을 안 했으니 disableAutoSelect()도 걸리지 않는다.
+    //   신고 ①(로그인이 두 번 필요해 보임)은 로딩 화면으로 이미 해결됐으므로
+    //   이 위험을 감수해서 얻을 것이 없다.
     cancel_on_tap_outside: true,
   });
   window.google.accounts.id.renderButton(container, {
