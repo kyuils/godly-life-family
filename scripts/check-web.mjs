@@ -1040,6 +1040,21 @@ check('★ 무관한 오류가 진행 중인 로그인을 취소하지 않는다
     'back.hidden = true가 escapeOffered 가드보다 앞에 있다 — 가드가 무력하다';
 });
 
+check('★ 새 로그인 흐름은 로딩 상태를 깨끗한 데서 시작한다', () => {
+  // 버려진 흐름은 finally에서 clearLoading()을 건너뛴다(abandoned). 그래서
+  // «다른 계정 콜백으로 흐름이 바뀐» 경우 escapeOffered가 true로 남고,
+  // 다음 흐름의 showLoading이 조기 반환해 탈출 버튼이 처음부터 보이며
+  // 20초 타이머도 걸리지 않는다. afterSignIn 시작에서 한 번 지워야 한다.
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  const body = fnBodyOf(app, 'afterSignIn');
+  if (!body) return 'afterSignIn을 찾지 못함';
+  const atClear = body.indexOf('clearLoading()');
+  const atShow = body.indexOf('showLoading(');
+  if (atClear < 0) return 'afterSignIn이 clearLoading()으로 앞 흐름의 잔재를 지우지 않는다';
+  return atClear < atShow ||
+    'clearLoading()이 showLoading()보다 뒤에 있다 — 앞 흐름의 escapeOffered가 그대로 남는다';
+});
+
 check('★ 로드 실패 화면에 계정을 바꿀 수단이 있다 (막다른 골목 방지)', () => {
   // 실패 코드가 만료 계열이 아니면(unauthorized·forbidden·deactivated·server_error)
   // app:session-expired가 뜨지 않아 renderLogin()이 다시 불리지 않는다.

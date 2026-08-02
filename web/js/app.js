@@ -285,6 +285,13 @@ async function afterSignIn(email) {
   signingInEmail = (email === undefined || email === null)
     ? api.getSessionEmail()
     : String(email).toLowerCase();
+  // ★ 새 흐름은 로딩 화면 상태를 **깨끗한 데서 시작한다** (계약 §6.5).
+  //   버려진 흐름은 finally에서 clearLoading()을 건너뛴다(abandoned). 그래서
+  //   «다른 계정 콜백으로 흐름이 바뀐» 경우 escapeOffered가 true로 남고,
+  //   다음 흐름의 showLoading이 조기 반환해 **탈출 버튼이 처음부터 보이고
+  //   20초 타이머도 걸리지 않는다.** 여기서 한 번 지우면 모든 경로가 덮인다.
+  //   (2026-08-02 최종 검토자 지적)
+  clearLoading();
   const seq = ++signInSeq;
   // ★ 세션 세대는 **첫 await 이전에** 잡는다. 뒤에서 읽으면 이미 다른 계정으로
   //   갈아끼워진 뒤일 수 있어, 엉뚱한 계정에 흐름을 고정하게 된다 (계약 §6.5).
@@ -514,11 +521,16 @@ function failToLogin(code, opts) {
   viewLibrary.resetView();
   viewClass.resetView();
 
-  // ★ 여기서 renderLogin()을 부르면 안 된다.
+  // ★ 이 함수가 **스스로** renderLogin()을 부르면 안 된다.
   // MOCK 모드(로컬 미리보기)에서 initGis가 즉시 onSignedIn을 호출하므로
-  // 「로드 실패 → 로그인 화면 → 자동 로그인 → 또 실패」 무한 루프가 된다
+  // 「로드 실패 → 로그인 화면 → 자동 로그인 → 또 실패」가 **사람 손 없이** 돈다
   // (7차 검토 N1). 대신 사용자가 «다시 시도»를 누르게 한다 —
   // 실제 사용자에게도 재로그인보다 나은 회복 경로다.
+  //
+  // ※ 아래 «다른 계정으로 로그인»은 signOut()을 거쳐 결국 renderLogin()에 닿는다.
+  //   그래도 괜찮다 — **사용자가 누를 때만** 한 바퀴 돌기 때문이다. 위에서 금지한 것은
+  //   «자동으로 도는 고리»이지 «사용자가 여는 회복 경로»가 아니다.
+  //   (2026-08-02 최종 검토자가 이 주석의 정합성을 지적했다)
   closeSheet();
   show('screen-login');
   const holder = el('#gis-button');
