@@ -37,10 +37,28 @@ const READ_ACTIONS = new Set([
   'whoami', 'getMyRecords', 'getMyPrayers', 'getAllRecords', 'getAllPrayers', 'getMembers',
 ]);
 
+// ★ 로그인 «세대». 세션의 **계정이 바뀔 때마다** 1 증가한다 (계약 §6.5).
+//
+// 왜 필요한가 (2026-08-02 신고, 재현으로 확인):
+//   post()는 요청을 **보내는 순간의** currentToken을 읽는다. 그런데 구글 콜백은
+//   진행 중인 로그인 흐름과 무관하게 setSession으로 전역 토큰을 갈아끼운다.
+//   그 결과 한 번의 로그인 안에서
+//       whoami       ← A 계정 토큰  → ok
+//       getMyRecords ← B 계정 토큰  → unauthorized
+//   가 되어, 가입한 적도 없는 계정에게 「등록되지 않은 계정입니다」가 떴다.
+//   흐름 시작 시점의 세대를 잡아 두고 call()에서 대조하면 이 섞임이 원천 차단된다.
+let sessionEpoch = 0;
+
 export function setSession(email, idToken) {
   const lower = email ? String(email).toLowerCase() : null;
-  // 계정이 바뀌면 이전 사용자의 캐시를 즉시 파기한다.
-  if (currentEmail && currentEmail !== lower) clearCache();
+  if (currentEmail !== lower) {
+    // 계정이 바뀌면 이전 사용자의 캐시를 즉시 파기한다.
+    if (currentEmail) clearCache();
+    sessionEpoch += 1;
+  }
+  // ★ 같은 계정의 새 토큰(중복 클릭·자동 로그인 재발급)은 세대를 올리지 않는다.
+  //   올리면 진행 중이던 정상 흐름이 stale_session으로 죽는데, 같은 사람이므로
+  //   더 새 토큰으로 계속 진행하는 것이 옳다.
   currentEmail = lower;
   if (lower) lastEmail = lower;
   currentToken = idToken || null;
@@ -48,6 +66,11 @@ export function setSession(email, idToken) {
 
 export function getSessionEmail() {
   return currentEmail;
+}
+
+/** 지금의 로그인 세대. 로그인 흐름 시작 시 잡아 두고 call()에 넘긴다. */
+export function getSessionEpoch() {
+  return sessionEpoch;
 }
 
 /** 직전에 로그인했던 사람(로그아웃 후에도 남는다). 계정 전환 감지 전용. */
@@ -61,6 +84,7 @@ export function clearCache() {
 
 /** 로그아웃·세션만료 시 호출. 토큰과 캐시를 모두 버린다. */
 export function clearSession() {
+  if (currentEmail !== null) sessionEpoch += 1;
   currentEmail = null;
   currentToken = null;
   clearCache();
@@ -120,6 +144,15 @@ async function postSafe(action, params) {
  */
 export async function call(action, params, opts) {
   const options = opts || {};
+
+  // ★ 흐름 고정 (계약 §6.5). 반드시 **여기**에 있어야 한다.
+  //   호출부(load.js·app.js)에 두면 새 호출부가 하나 빠뜨리는 순간 결함이
+  //   조용히 되살아난다. 토큰을 소유한 계층이 직접 지킨다.
+  //   세대가 어긋나면 **요청을 보내지 않는다** — 보내는 순간 남의 토큰이 실린다.
+  if (options.epoch !== undefined && options.epoch !== sessionEpoch) {
+    return { ok: false, code: 'stale_session' };
+  }
+
   const useCache = READ_ACTIONS.has(action) && !options.noCache;
   const key = cacheKey(action, params);
 
@@ -169,7 +202,10 @@ export function errorMessage(code) {
     unauthorized: '등록되지 않은 계정입니다.',
     bad_request: '입력한 내용을 다시 확인해 주세요.',
     bad_code: '등록 코드가 올바르지 않습니다.',
-    already_registered: '이미 등록된 계정입니다.',
+    // ★ 조치를 함께 적는다. 회선이 흔들려 응답만 유실됐을 때 사용자가 한 번 더
+    //   누르면 이 코드가 나오는데, 문구만 있으면 «그래서 어쩌라고» 상태로 멈춘다.
+    //   이미 명부에 있으니 필요한 행동은 «다시 가입»이 아니라 «다시 로그인»이다.
+    already_registered: '이미 등록된 계정입니다. 아래 «다른 계정으로 로그인»을 눌러 같은 계정으로 다시 로그인해 주세요.',
     deactivated: '사용이 중지된 계정입니다. 담임교사에게 문의해 주세요.',
     too_many_attempts: '시도가 너무 많습니다. 10분 후 다시 시도해 주세요.',
     registration_closed: '지금은 가입을 받지 않습니다. 담임교사에게 문의해 주세요.',

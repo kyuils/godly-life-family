@@ -489,6 +489,9 @@
     .register-account .ra-label{font-size:var(--type-caption1-size);color:var(--semantic-label-alternative);font-weight:var(--weight-bold-text);letter-spacing:0.03em}
     .register-account .ra-email{font-size:var(--type-body2-size);color:var(--semantic-label-normal);font-weight:var(--weight-bold-text);word-break:break-all}
     .register-error{margin:0 var(--space-16) var(--space-14);padding:var(--space-10) var(--space-14);border-radius:var(--radius-md);background:color-mix(in srgb, var(--semantic-status-negative) 12%, transparent);color:var(--semantic-status-negative);font-size:var(--type-label2-size);line-height:1.5}
+    /* 오류가 없는데도 붉은 빈 상자가 늘 떠 있으면 «뭔가 잘못됐나» 싶다.
+       .login-notice와 같은 규칙을 가입 화면에도 둔다. */
+    .register-error:empty{display:none}
     .register .form-label .req{color:var(--semantic-status-negative)}
     .register .form-label .opt{color:var(--semantic-label-alternative);font-weight:var(--weight-medium)}
     .part-pills{display:flex;flex-wrap:wrap;gap:var(--space-8);margin-bottom:var(--space-8)}

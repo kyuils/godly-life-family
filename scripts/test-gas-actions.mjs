@@ -925,6 +925,28 @@ section('★ 가입 3분류 — 성도(member) (v1.2)');
     return eq(r.code, 'server_misconfig');
   });
 
+  // ★ 2026-08-02 보강. 예전에는 extraHeader(+학생의 학교)만 검사해서,
+  //   email 열 이름이 손으로 바뀌면 **email이 빈 행**이 저장되고도 ok:true가 났다.
+  //   그러면 방금 가입한 사람이 즉시 unauthorized가 되고, 중복 검사도 같은 열을
+  //   보므로 무력화되어 몇 번을 가입해도 매번 성공하고 매번 못 들어간다.
+  ['email', '이름', 'active'].forEach((col) => {
+    t('★ 명부 헤더에 «' + col + '» 열이 없으면 가입이 실패한다 (조용한 성공 금지)', () => {
+      const h = createHarness(seedBase({ registerCode: 'hyerim2026' }));
+      const sh = h.sheet('MEMBERS_학생');
+      const i = sh.data[0].indexOf(col);
+      if (i < 0) return '시드 헤더에 ' + col + '이 없다 (테스트 전제가 깨졌다)';
+      sh.data.forEach((row) => row.splice(i, 1));
+      const before = sh.data.length;
+      const r = h.callAction({
+        action: 'register', idToken: tok('hdr-' + col + '@example.com'),
+        kind: 'student', name: '헤더시험', extra: '중1-1', school: '혜림중', code: 'hyerim2026',
+      });
+      if (r.ok) return '헤더가 없는데 가입이 성공했다 — 못 쓰는 행이 시트에 남는다';
+      if (r.code !== 'server_misconfig') return '코드: ' + r.code;
+      return sh.data.length === before || '실패했는데 행이 추가됐다';
+    });
+  });
+
   t('★ 학교·소속전도회에도 수식 인젝션 방어가 걸린다 (불변식 5)', () => {
     const h = createHarness(seedBase({ registerCode: 'hyerim2026' }));
     h.callAction({

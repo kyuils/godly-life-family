@@ -86,7 +86,7 @@ export function initGis(container, callback, opts) {
   if (isMock()) {
     // 개발·E2E 전용. 실제 배포에서는 APP_CONFIG.MOCK이 null이어야 한다.
     applyToken(APP_CONFIG.MOCK, 'mock:' + APP_CONFIG.MOCK);
-    onSignedIn();
+    onSignedIn(APP_CONFIG.MOCK);
     return;
   }
 
@@ -114,7 +114,11 @@ function renderGisButton(container, autoSelect) {
     callback: function (resp) {
       const email = emailFromJwt(resp.credential);
       applyToken(email, resp.credential);
-      onSignedIn();
+      // ★ 어느 계정의 자격증명인지 **반드시 함께** 넘긴다.
+      //   콜백은 버튼 클릭·One Tap·자동 로그인 셋 다에서 오고, 서로 겹칠 수 있다.
+      //   호출부가 «누가 왔는지» 알아야 진행 중이던 다른 계정의 흐름을 버릴 수 있다
+      //   (2026-08-02 신고의 근본 원인 — 계약 §6.5).
+      onSignedIn(email);
     },
     // 승인된 구글 세션이 **하나뿐일** 때만 사용자 조작 없이 토큰을 돌려준다.
     // 이 «하나뿐» 조건이 공용 휴대폰에서 이 기능을 쓸 수 있게 하는 근거다:

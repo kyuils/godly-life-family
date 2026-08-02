@@ -227,6 +227,11 @@ function handleRegister(body) {
     const ROUTE = {
       student: { name: SHEET_NAMES.MEMBERS_STUDENT, headerKey: 'MEMBERS_STUDENT', extraHeader: '학년반' },
       parent: { name: SHEET_NAMES.MEMBERS_PARENT, headerKey: 'MEMBERS_PARENT', extraHeader: '자녀이름' },
+      // ★ 시트 열 이름은 «소속전도회»인데 가입 화면 문구는 «혜림교회 소속부서»다.
+      //   불일치는 **의도된 것**이다 (2026-08-02 사용자 결정, 계약 §2.2b) —
+      //   이미 가입한 성도의 데이터를 건드리지 않으려고 화면 문구만 바꿨다.
+      //   여기를 «소속부서»로 고치면 기존 시트와 어긋나 성도 가입이 전부
+      //   server_misconfig로 실패한다. 바꾸려면 사람이 시트 헤더를 먼저 고쳐야 한다.
       member: { name: SHEET_NAMES.MEMBERS_MEMBER, headerKey: 'MEMBERS_MEMBER', extraHeader: '소속전도회' },
     };
     const route = ROUTE[kind];
@@ -241,7 +246,17 @@ function handleRegister(body) {
     //   실행하지 않은 상태로 새 필드를 받으면, rowFromObj_가 그 키를 말없이 버리고
     //   가입은 ok:true로 성공한다. 사용자도 교사도 누락을 모른다.
     //   조용히 버리느니 명시적으로 실패한다.
-    const required = [extraHeader].concat(kind === 'student' ? ['학교'] : []);
+    //
+    // ★ 2026-08-02 보강 — email·이름·active도 함께 본다.
+    //   예전에는 extraHeader(+학생의 학교)만 봤다. 그런데 `email` 열 이름이
+    //   손으로 바뀌거나 지워지면(`Email`, 뒤 공백 등) rowFromObj_가 그 값을
+    //   말없이 버려 **email이 빈 행**이 저장된다. 그러면
+    //     · lookupMember가 못 찾아 방금 가입한 사람이 즉시 unauthorized가 되고
+    //     · findAnyMemberRow_의 중복 검사도 같은 열을 보므로 무력화되어
+    //       몇 번을 가입해도 매번 ok:true를 받고 매번 못 들어간다.
+    //   조용한 성공보다 명시적 실패가 낫다.
+    const required = ['email', '이름', 'active', extraHeader]
+      .concat(kind === 'student' ? ['학교'] : []);
     const missing = required.filter(function (h) { return headers.indexOf(h) < 0; });
     if (missing.length) {
       console.log('[register] 시트 열 누락: ' + sheetName + ' → ' + missing.join(', ') +

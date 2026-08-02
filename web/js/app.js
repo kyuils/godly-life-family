@@ -179,7 +179,31 @@ function renderLogin(opts) {
   setupInstallBanner('#install-banner', '#install-go');
   const holder = el('#gis-button');
   holder.innerHTML = '';
-  auth.initGis(holder, afterSignIn, { autoSelect: !!(opts && opts.autoSelect) });
+  auth.initGis(holder, onCredential, { autoSelect: !!(opts && opts.autoSelect) });
+}
+
+/**
+ * 구글이 새 자격증명을 줬을 때. 버튼 클릭·One Tap·자동 로그인이 **모두** 여기로 온다.
+ *
+ * ★ 왜 그냥 afterSignIn을 부르지 않는가 (2026-08-02 신고의 근본 원인)
+ *   콜백은 겹쳐서 도착할 수 있다(자동 로그인이 도는 사이 사용자가 버튼을 누르는 등).
+ *   예전에는 `if (signingIn) return`으로 **두 번째 콜백을 통째로 버렸는데**, 그 사이
+ *   auth.js의 applyToken은 이미 전역 토큰을 새 계정으로 갈아끼운 뒤였다. 그래서
+ *   «진행 중이던 A 계정 흐름이 B 계정 토큰으로 남은 요청을 보내는» 상태가 됐고,
+ *   가입한 적 없는 계정에게 「등록되지 않은 계정입니다」가 떴다.
+ *   이제는 **나중에 온 계정이 이긴다** — 사용자가 방금 고른 계정이 그것이기 때문이다.
+ */
+function onCredential(email) {
+  const lower = String(email || '').toLowerCase();
+  if (signingIn) {
+    // 같은 계정이면 중복 클릭이다. 진행 중인 흐름을 그대로 두는 편이 빠르다.
+    if (lower && lower === signingInEmail) return;
+    // 다른 계정이다 — 진행 중이던 흐름을 버린다. 버리지 않으면 그 흐름의 남은
+    // 요청이 새 계정 토큰으로 나가고, 화면도 늦게 도착해 덮어쓴다.
+    signInSeq += 1;
+  }
+  signingIn = false;
+  afterSignIn(lower || undefined);
 }
 
 // ---------------------------------------------------------------------------
@@ -215,6 +239,7 @@ function showLoading(message) {
     //   (renderTab이 bumpGeneration/stale로 푸는 것과 같은 종류의 문제다)
     signInSeq += 1;
     signingIn = false;          // 진행 중 표시를 풀어야 다시 로그인할 수 있다
+    signingInEmail = null;
     clearLoading();
     backToLogin('');
   };
@@ -231,26 +256,39 @@ function clearLoading() {
 // 늦게 끝난 쪽이 화면을 덮어쓴다.
 let signingIn = false;
 
-// 이 로그인 흐름의 세대. «돌아가기»로 흐름을 버릴 때 올린다.
+// 진행 중인 흐름이 **어느 계정**의 것인지. 겹쳐 온 콜백이 같은 계정인지 판단한다.
+let signingInEmail = null;
+
+// 이 로그인 흐름의 세대. 흐름을 버릴 때 올린다
+// («돌아가기» · 다른 계정 콜백 도착 · 예기치 못한 오류).
 // 버려진 흐름은 응답이 뒤늦게 도착해도 화면을 건드리지 않는다.
 let signInSeq = 0;
 
-async function afterSignIn() {
+async function afterSignIn(email) {
   if (signingIn) return;
   signingIn = true;
+  signingInEmail = (email === undefined || email === null)
+    ? api.getSessionEmail()
+    : String(email).toLowerCase();
   const seq = ++signInSeq;
+  // ★ 세션 세대는 **첫 await 이전에** 잡는다. 뒤에서 읽으면 이미 다른 계정으로
+  //   갈아끼워진 뒤일 수 있어, 엉뚱한 계정에 흐름을 고정하게 된다 (계약 §6.5).
+  const epoch = api.getSessionEpoch();
   const abandoned = function () { return seq !== signInSeq; };
   try {
     // ★ try 안에서 부른다. 밖에 두면 여기서 예외가 났을 때 finally를 거치지 않아
     //   signingIn이 true로 잠긴 채 남고, 이후 모든 로그인 시도가 조용히 무시된다.
     showLoading('로그인 정보를 확인하고 있어요');
-    const res = await api.call('whoami', {}, { noCache: true });
+    const res = await api.call('whoami', {}, { noCache: true, epoch: epoch });
     if (abandoned()) return;
 
     if (res.ok) {
       state.session = res;
       showLoading('기록을 불러오고 있어요');
-      const loaded = await loadMyData(auth.todayStr());
+      const loaded = await loadMyData(auth.todayStr(), epoch);
+      // ★ 버려짐 검사가 반드시 **먼저**다. 순서를 바꾸면, 버려진 흐름이
+      //   stale_session으로 끝나면서 새 흐름이 띄운 정상 앱 화면 위에
+      //   「로그인이 끊겼습니다」를 덧씌운다.
       if (abandoned()) return;
       if (!loaded.ok) { failToLogin(loaded.code); return; }
       renderApp();
@@ -277,6 +315,7 @@ async function afterSignIn() {
     if (!abandoned()) {
       clearLoading();
       signingIn = false;
+      signingInEmail = null;
     }
   }
 }
@@ -294,7 +333,11 @@ async function afterSignIn() {
 const REG_KINDS = {
   student: { extraLabel: '학년·반 (선택)', extraHint: '예: 중2-1', school: true },
   parent: { extraLabel: '자녀 이름 (선택)', extraHint: '예: 김믿음', school: false },
-  member: { extraLabel: '소속 전도회 (선택)', extraHint: '예: 한나전도회', school: false },
+  // ★ 화면 문구는 «혜림교회 소속부서»지만 시트 열 이름은 여전히 «소속전도회»다.
+  //   (2026-08-02 사용자 결정 — 이미 가입한 성도의 데이터를 건드리지 않기 위해
+  //    화면 문구만 바꿨다. 시트 열을 바꾸려면 사람이 직접 헤더를 고쳐야 한다.
+  //    계약 §2.2b 참조. 이 불일치를 «오타»로 보고 고치지 말 것.)
+  member: { extraLabel: '혜림교회 소속부서 (선택)', extraHint: '예: 청년부', school: false },
 };
 
 function renderRegister(email) {
@@ -319,13 +362,28 @@ let regKind = 'student';
 
 function setKind(kind) {
   const cfg = REG_KINDS[kind] || REG_KINDS.student;
-  regKind = REG_KINDS[kind] ? kind : 'student';
+  const next = REG_KINDS[kind] ? kind : 'student';
+  const changed = next !== regKind;
+  regKind = next;
 
   Object.keys(REG_KINDS).forEach(function (k) {
-    el('#reg-kind-' + k).classList.toggle('on', k === regKind);
+    const btn = el('#reg-kind-' + k);
+    btn.classList.toggle('on', k === regKind);
+    // 선택 상태를 색으로만 표시하면 화면낭독기 사용자는 지금 무엇이 골라져 있는지
+    // 알 방법이 없다. 세 버튼은 index.html에서 role="group"으로 묶여 있다.
+    btn.setAttribute('aria-pressed', k === regKind ? 'true' : 'false');
   });
   el('#reg-extra-label').textContent = cfg.extraLabel;
   el('#reg-extra').placeholder = cfg.extraHint;
+
+  // ★ 분류가 **실제로 바뀌면** 가운데 칸을 비운다.
+  //   이 칸은 분류마다 의미가 다르다(학년·반 / 자녀 이름 / 소속부서). 안 비우면
+  //   학생으로 «중2-1»을 적었다가 학부모로 바꾼 사람의 시트 «자녀이름» 열에
+  //   «중2-1»이 저장된다. 담임교사는 그 값이 왜 거기 있는지 알 수 없다.
+  //   서버는 이것을 막을 수 없다 — 세 분류 모두 자유 텍스트라 값만 보고는
+  //   «엉뚱한 칸의 값»인지 구분할 방법이 없다. 그래서 여기가 유일한 방어선이다.
+  //   같은 분류를 다시 눌렀을 때는 비우지 않는다(입력 중이던 내용을 잃는다).
+  if (changed) el('#reg-extra').value = '';
 
   // 고르지 않은 분류의 칸은 아예 감춘다 — 요청: "학부모 가입인데 학교 입력 안 뜨게"
   el('#reg-school-row').hidden = !cfg.school;
@@ -334,6 +392,23 @@ function setKind(kind) {
 
 async function submitRegister() {
   const btn = el('#reg-submit');
+
+  // ★ 빈 칸은 **서버에 보내지 않는다.**
+  //   서버는 빈 코드도 «틀린 코드»로 세어 백오프 카운터를 올린다(계약 §4.2).
+  //   코드를 아직 못 받은 사람이 일단 눌러보는 것만으로 5회를 채워 10분 잠기고,
+  //   전역 카운터는 10분에 20회라 **주일에 반 전체가 함께 가입할 때 아직 시도도
+  //   안 한 사람까지 같이 잠긴다.** 여기서 막는 것이 유일한 예방이다.
+  if (!String(el('#reg-name').value).trim()) {
+    el('#reg-error').textContent = '이름을 입력해 주세요.';
+    el('#reg-name').focus();
+    return;
+  }
+  if (!String(el('#reg-code').value).trim()) {
+    el('#reg-error').textContent = '등록 코드를 입력해 주세요. 담임교사에게 받으실 수 있습니다.';
+    el('#reg-code').focus();
+    return;
+  }
+
   btn.disabled = true; // 더블 서브밋 방지
   el('#reg-error').textContent = '';
   try {
@@ -346,12 +421,17 @@ async function submitRegister() {
       code: el('#reg-code').value,
     });
     if (!res.ok) {
-      el('#reg-error').textContent = api.errorMessage(res.code);
+      // 로그인 화면과 같은 이유로 코드를 병기한다 — 비개발자 운영자가 화면만 보고
+      // docs/ops의 «이럴 때는» 표를 찾아갈 수 있어야 한다. 가입 화면만 빠져 있었다.
+      el('#reg-error').textContent = api.errorMessage(res.code) + ' [' + res.code + ']';
       return;
     }
     state.session = res;           // register 성공 응답은 whoami와 같은 형태
-    const loaded = await loadMyData(auth.todayStr());
-    if (!loaded.ok) { failToLogin(loaded.code); return; }
+    const loaded = await loadMyData(auth.todayStr(), api.getSessionEpoch());
+    // ★ 가입은 이미 **성공**했다. 여기서 failToLogin을 그대로 쓰면
+    //   「등록되지 않은 계정입니다」가 떠서, 명부에 올라간 사람이 가입에 실패한 줄 안다.
+    //   그래서 «가입은 끝났다»를 먼저 말하는 전용 경로를 쓴다.
+    if (!loaded.ok) { failAfterRegister(loaded.code); return; }
     renderApp();
   } catch (e) {
     el('#reg-error').textContent = '등록하지 못했습니다. 인터넷 연결을 확인해 주세요.';
@@ -365,12 +445,34 @@ async function submitRegister() {
 // ---------------------------------------------------------------------------
 
 /**
+ * **가입은 성공했는데** 곧이어 기록을 불러오지 못한 경우.
+ *
+ * ★ failToLogin을 그대로 쓰면 안 된다. 그 문구는 «로그인 경로» 전용이라
+ *   「등록되지 않은 계정입니다」가 뜨는데, 이 사람은 방금 명부에 올라갔다.
+ *   그러면 가입이 실패한 줄 알고 또 가입을 시도하고(→ already_registered),
+ *   담임교사에게 «가입이 안 된다»고 연락하게 된다.
+ *   무엇보다 먼저 **«가입은 끝났다»** 를 말해 줘야 한다.
+ *   (2026-08-02 가입 화면 검토 지적)
+ */
+function failAfterRegister(code) {
+  failToLogin(code, {
+    lead: '가입은 완료되었습니다. 다만 기록을 불러오지 못했어요. ',
+    // 방금 명부에 올라간 사람에게 «등록되지 않은 계정»은 사실이 아니다.
+    // 서버 명부 캐시가 아직 갱신되지 않았을 때 나올 수 있는 코드다.
+    cause: { unauthorized: '잠시 후 «다시 시도»를 눌러 주세요.' },
+  });
+}
+
+/**
  * 로그인은 됐지만 내 기록을 불러오지 못한 경우.
  *
  * 화면을 «빈 앱»으로 보여주면 사용자는 기록이 사라졌다고 오해한다.
  * 무엇이 잘못됐는지 알리고, 재로그인 없이 다시 시도할 수 있게 한다.
+ *
+ * @param opts.lead  앞머리 문구를 갈아끼운다 (가입 직후 경로 — failAfterRegister)
+ * @param opts.cause 특정 코드의 설명만 덮어쓴다
  */
-function failToLogin(code) {
+function failToLogin(code, opts) {
   // backToLogin과 같은 수준으로 화면 상태까지 비운다 — 앞사람의 편집 대상 날짜,
   // 펼쳐 둔 기도, 열람 중이던 문서가 다음 로그인으로 이월되지 않게 (7차 검토 N2).
   resetUserData();
@@ -405,6 +507,7 @@ function failToLogin(code) {
   };
   holder.appendChild(btn);
 
+  const o = opts || {};
   const CAUSE = {
     network_error: '인터넷 연결을 확인해 주세요.',
     stale_session: '로그인이 끊겼습니다. 다시 로그인해 주세요.',
@@ -414,9 +517,9 @@ function failToLogin(code) {
     unauthorized: '등록되지 않은 계정입니다. 담임교사에게 문의해 주세요.',
     forbidden: '권한이 없습니다.',
   };
+  const cause = (o.cause && o.cause[code]) || CAUSE[code] || '잠시 후 다시 시도해 주세요.';
   el('#login-notice').textContent =
-    '기록을 불러오지 못했습니다. ' + (CAUSE[code] || '잠시 후 다시 시도해 주세요.') +
-    ' [' + code + ']';
+    (o.lead || '기록을 불러오지 못했습니다. ') + cause + ' [' + code + ']';
 }
 
 // ---------------------------------------------------------------------------
@@ -540,7 +643,14 @@ window.addEventListener('app:session-expired', function (e) {
   // 로그인 화면으로 되돌아오는» 유일한 자동 경로다.
   const d = (e && e.detail) || {};
   const tag = d.code ? ' [' + d.code + (d.action ? '@' + d.action : '') + ']' : '';
-  backToLogin('로그인이 만료되었습니다. 다시 로그인해 주세요. (쓰던 내용은 보관해 두었어요)' + tag);
+  // ★ 가입 화면에서 만료된 경우 «보관해 두었어요»는 거짓말이다 — 보관 대상은
+  //   오늘·기도 탭의 draft뿐이고, 가입 화면의 이름·코드는 다시 로그인하면 비어 있다.
+  //   담임교사에게 코드를 받으려고 이 화면에서 기다리다 만료되는 일이 실제로 생긴다.
+  const onRegister = !el('#screen-register').hidden;
+  const kept = onRegister
+    ? '(입력하신 내용은 다시 적어 주셔야 합니다)'
+    : '(쓰던 내용은 보관해 두었어요)';
+  backToLogin('로그인이 만료되었습니다. 다시 로그인해 주세요. ' + kept + tag);
 });
 // 같은 기기에서 다른 계정으로 로그인한 경우 — 앞사람의 임시 입력을 즉시 파기한다.
 window.addEventListener('app:account-changed', function () {
@@ -572,7 +682,11 @@ function showUnexpected(what) {
   //   (이 분기가 없으면 아래 «login.hidden이면 반환»에 걸려 오류가 조용히 사라진다)
   if (loading && !loading.hidden) {
     clearLoading();
+    // ★ 세대를 함께 올린다. 잠금만 풀면 진행 중이던 흐름이 «버려지지 않은 채»
+    //   살아 있어서, 새 흐름과 둘이 동시에 달리게 된다 (2026-08-02 검토 지적).
+    signInSeq += 1;
     signingIn = false;
+    signingInEmail = null;
     show('screen-login');
   } else if (login && login.hidden) {
     return; // 앱 화면이 정상히 떠 있으면 건드리지 않는다

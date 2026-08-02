@@ -20,11 +20,15 @@ import * as S from './stats.js';
  * 날짜가 아니라 데이터로 판정하므로 긴 연속기록이 잘리지 않는다.
  *
  * @param todayStr 표준 오늘 (Asia/Seoul YYYY-MM-DD)
+ * @param epoch    로그인 흐름이 시작될 때 잡은 세션 세대 (계약 §6.5).
+ *   모든 요청에 그대로 넘긴다. 흐름 도중 다른 계정의 구글 콜백이 도착하면
+ *   api.call이 **요청을 보내기 전에** 끊어 준다 — 안 그러면 이 함수의 요청들이
+ *   whoami와 **다른 계정 토큰**으로 나간다 (2026-08-02 신고의 근본 원인).
  * @return { ok: true } | { ok: false, code }
  *
  * ★ 실패를 «빈 데이터»로 갈음하지 않는다. 호출부는 ok가 false면 앱 화면을 그리면 안 된다.
  */
-export async function loadMyData(todayStr) {
+export async function loadMyData(todayStr, epoch) {
   const today = todayStr;
   // 응답을 state에 쓰기 전에 «이 요청을 시작한 사람»이 아직 로그인 상태인지 확인한다.
   // 세션이 파기된 뒤 늦게 도착한 응답이 state를 되살리면, 다음에 로그인한 가족에게
@@ -32,7 +36,7 @@ export async function loadMyData(todayStr) {
   const owner = api.getSessionEmail();
   let months = S.defaultMonths(today);
 
-  let res = await api.call('getMyRecords', { months: months }, { noCache: true });
+  let res = await api.call('getMyRecords', { months: months }, { noCache: true, epoch: epoch });
   if (!res.ok) return { ok: false, code: res.code };
   let rows = res.rows;
 
@@ -44,7 +48,7 @@ export async function loadMyData(todayStr) {
   let guard = 0;
   while (S.streakNeedsMoreMonths(rows, today, loadedMonths) && loadedMonths.length < 6 && guard++ < 6) {
     const next = S.extendMonths(loadedMonths, 6);
-    res = await api.call('getMyRecords', { months: next }, { noCache: true });
+    res = await api.call('getMyRecords', { months: next }, { noCache: true, epoch: epoch });
     if (!res.ok) break;                // 실패하면 loadedMonths는 직전 성공 상태로 남는다
     loadedMonths = next;
     rows = res.rows;
@@ -67,7 +71,7 @@ export async function loadMyData(todayStr) {
   //   아니라 «처음부터 없는 기능»이다.
   //   (2026-07-31 시니어 검토에서 [치명]으로 지적된 경로)
   if (isPrayerUser(state.session)) {
-    const p = await api.call('getMyPrayers', {}, { noCache: true });
+    const p = await api.call('getMyPrayers', {}, { noCache: true, epoch: epoch });
     // 기도 로드 실패도 «기도 없음»으로 갈음하지 않는다.
     if (!p.ok) return { ok: false, code: p.code };
     if (api.getSessionEmail() !== owner) return { ok: false, code: 'stale_session' };

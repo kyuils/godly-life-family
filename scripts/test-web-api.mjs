@@ -257,6 +257,79 @@ await t('모르는 코드에도 안내 문구를 준다', () => {
   return (typeof msg === 'string' && msg.length > 5) || '빈 메시지';
 });
 
+// ---------------------------------------------------------------------------
+// ★ 흐름 고정 (계약 §6.5) — 2026-08-02 신고의 근본 원인
+//
+// 정적 검사로는 «epoch라는 글자가 있는가»밖에 못 본다. 여기서는 실제로
+// 흐름 도중에 계정을 갈아끼우고, **남의 토큰이 실린 요청이 나가지 않는지**
+// 나간 요청 목록으로 확인한다.
+// ---------------------------------------------------------------------------
+console.log('\n--- ★ 로그인 흐름 고정 (계정 혼선 차단) ---');
+
+// 나가는 요청의 토큰을 기록하도록 fetch 스텁을 확장한다.
+const sentTokens = [];
+const baseFetch = globalThis.fetch;
+globalThis.fetch = async function (u, opts) {
+  try { sentTokens.push(JSON.parse(opts.body).idToken); } catch (e) { sentTokens.push(null); }
+  return baseFetch(u, opts);
+};
+
+await t('★ 흐름 도중 계정이 바뀌면 남의 토큰으로 요청하지 않는다', async () => {
+  api.clearSession();
+  api.setSession('a@example.com', 'tok:A');
+  const epoch = api.getSessionEpoch();
+
+  nextResponse = { ok: true, rows: [] };
+  sentTokens.length = 0;
+  const first = await api.call('whoami', {}, { noCache: true, epoch: epoch });
+  if (!first.ok) return '첫 요청이 실패했다';
+
+  // 구글 콜백이 한 번 더 도착해 전역 토큰이 B로 바뀐 상황
+  api.setSession('b@example.com', 'tok:B');
+
+  const second = await api.call('getMyRecords', { months: ['2026-08'] }, { noCache: true, epoch: epoch });
+  if (second.ok) return '세대가 어긋났는데 요청이 통과했다';
+  if (second.code !== 'stale_session') return '코드가 stale_session이 아니다: ' + second.code;
+
+  // ★ 이것이 핵심 — 요청 자체가 **나가지 않아야** 한다. 나갔다면 이미 B 토큰이 실렸다.
+  if (sentTokens.indexOf('tok:B') >= 0) return 'B 계정 토큰이 실린 요청이 나갔다';
+  return sentTokens.length === 1 || '보낸 요청 수가 1이 아니다: ' + sentTokens.length;
+});
+
+await t('★ 같은 계정의 새 토큰은 흐름을 끊지 않는다 (중복 클릭)', async () => {
+  api.clearSession();
+  api.setSession('a@example.com', 'tok:A1');
+  const epoch = api.getSessionEpoch();
+  // 같은 사람이 한 번 더 눌러 새 토큰이 발급된 경우 — 흐름을 죽이면 안 된다.
+  api.setSession('a@example.com', 'tok:A2');
+  nextResponse = { ok: true, rows: [] };
+  sentTokens.length = 0;
+  const r = await api.call('getMyRecords', { months: ['2026-08'] }, { noCache: true, epoch: epoch });
+  if (!r.ok) return '같은 계정인데 끊겼다: ' + r.code;
+  return sentTokens[0] === 'tok:A2' || '더 새 토큰을 쓰지 않았다: ' + sentTokens[0];
+});
+
+await t('★ 로그아웃도 세대를 올려 진행 중이던 흐름을 끊는다', async () => {
+  api.clearSession();
+  api.setSession('a@example.com', 'tok:A');
+  const epoch = api.getSessionEpoch();
+  api.clearSession();
+  sentTokens.length = 0;
+  const r = await api.call('getMyRecords', { months: ['2026-08'] }, { noCache: true, epoch: epoch });
+  if (r.ok) return '로그아웃 뒤에도 요청이 통과했다';
+  return sentTokens.length === 0 || '로그아웃 뒤에 요청이 나갔다';
+});
+
+await t('세대를 안 넘기면 예전처럼 그대로 동작한다 (하위호환)', async () => {
+  api.clearSession();
+  api.setSession('a@example.com', 'tok:A');
+  nextResponse = { ok: true, rows: [] };
+  const r = await api.call('getMyRecords', { months: ['2026-08'] }, { noCache: true });
+  return r.ok || '세대 없이 부른 요청이 막혔다: ' + r.code;
+});
+
+globalThis.fetch = baseFetch;
+
 console.log('\n=== 결과 ===');
 console.log('PASS: ' + pass + ', FAIL: ' + failures.length);
 if (failures.length) {

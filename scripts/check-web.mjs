@@ -134,8 +134,16 @@ check('계정 전환·로그아웃 시 캐시를 파기하는 코드가 있다',
   return (hasSwitch && hasSignOut) || 'auth.js에 캐시 파기 경로가 없음';
 });
 
-check('setSession이 이메일 변경을 감지해 캐시를 비운다', () =>
-  /currentEmail\s*&&\s*currentEmail\s*!==/.test(api) || 'api.setSession에 계정 전환 감지가 없음');
+check('setSession이 계정 전환을 감지해 캐시를 비운다', () => {
+  // ★ 예전에는 «currentEmail && currentEmail !==» 라는 **문장 모양**을 정규식으로 봤다.
+  //   2026-08-02에 의미가 똑같은 리팩터링(if로 묶어 세대 증가를 함께 처리)만으로
+  //   이 검사가 깨져 오탐을 냈다. 모양이 아니라 «함수 안에서 비교와 파기가 함께
+  //   일어나는가»를 본다. 실제 격리 **동작**은 scripts/test-web-api.mjs가 검증한다.
+  const body = fnBodyOf(api, 'setSession');
+  if (!body) return 'setSession을 찾지 못함';
+  if (!/currentEmail\s*!==\s*lower/.test(body)) return '계정 전환 비교가 없음';
+  return /clearCache\(\)/.test(body) || '계정이 바뀔 때 캐시를 비우지 않는다';
+});
 
 // --- 3) 서비스워커 (계약 §6.2) ---------------------------------------------
 console.log('\n--- 서비스워커 ---');
@@ -878,6 +886,177 @@ check('★ 로그인 정보를 기기에 저장하지 않는다 (불변식 7)', 
   });
   return offenders.length === 0 ||
     '기기 저장소를 쓰는 파일: ' + offenders.join(', ') + ' — 자동 로그인은 구글 auto_select로 푼다';
+});
+
+// ---------------------------------------------------------------------------
+// v1.5 — 로그인 흐름의 계정 혼선 + 가입 화면 (2026-08-02 신고·검토)
+// ---------------------------------------------------------------------------
+
+check('★ 한 로그인 흐름은 한 계정 토큰으로만 나간다 (계약 §6.5)', () => {
+  // 신고된 결함: whoami는 A 계정, 기록 조회는 B 계정 토큰으로 나가
+  // «가입한 적 없는 계정인데 등록되지 않은 계정입니다»가 떴다.
+  const apiSrc = codeOnly(read(path.join(JS, 'api.js')));
+  const callBody = fnBodyOf(apiSrc, 'call');
+  if (!callBody) return 'api.call을 찾지 못함';
+
+  // ★ 검사가 있는 것만으로는 부족하다 — **요청을 만들기 전에** 있어야 한다.
+  //   뒤에 두면 이미 남의 토큰이 실린 요청이 나간 뒤다.
+  const atGuard = callBody.indexOf('options.epoch');
+  const atSend = callBody.search(/postSafe\(|post\(/);
+  if (atGuard < 0) return 'api.call에 세대(epoch) 대조가 없다';
+  if (atSend >= 0 && atGuard > atSend) return '세대 대조가 요청 전송보다 뒤에 있다';
+  if (!/sessionEpoch/.test(apiSrc)) return 'sessionEpoch가 없다';
+  if (!/export function getSessionEpoch/.test(apiSrc)) return 'getSessionEpoch를 내보내지 않는다';
+
+  // load.js의 **모든** api.call이 세대를 넘겨야 한다. 하나만 빠져도 그 요청이 샌다.
+  const loadSrc = codeOnly(read(path.join(JS, 'load.js')));
+  const calls = loadSrc.match(/api\.call\([^;]*?\)/g) || [];
+  const without = calls.filter((c) => !/epoch/.test(c));
+  if (calls.length === 0) return 'load.js에서 api.call을 찾지 못함';
+  return without.length === 0 ||
+    'load.js의 api.call ' + calls.length + '곳 중 ' + without.length + '곳이 세대를 안 넘긴다';
+});
+
+check('★ 로그인 흐름은 첫 요청 전에 세대를 잡는다 (계약 §6.5)', () => {
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  const body = fnBodyOf(app, 'afterSignIn');
+  if (!body) return 'afterSignIn을 찾지 못함';
+  const atEpoch = body.indexOf('api.getSessionEpoch()');
+  const atAwait = body.indexOf('await ');
+  if (atEpoch < 0) return 'afterSignIn이 세대를 잡지 않는다';
+  if (atAwait >= 0 && atEpoch > atAwait) {
+    return '세대를 첫 await 뒤에 잡는다 — 이미 다른 계정으로 바뀐 뒤일 수 있다';
+  }
+  // [^)]* 로 쓰면 안 된다 — 인자로 들어가는 auth.todayStr()의 닫는 괄호에서 멈춘다.
+  return /loadMyData\([^;]*epoch/.test(body) || 'loadMyData에 세대를 넘기지 않는다';
+});
+
+check('★ 나중에 온 구글 계정이 이긴다 (계약 §6.5)', () => {
+  // 겹쳐 온 콜백을 그냥 버리면, auth.js가 이미 갈아끼운 새 토큰으로 옛 흐름이
+  // 남은 요청을 보낸다. 사용자가 방금 고른 계정으로 다시 시작해야 한다.
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  const auth = codeOnly(read(path.join(JS, 'auth.js')));
+  if (!/onSignedIn\(\s*email\s*\)/.test(auth)) {
+    return 'auth.js가 콜백에 계정(email)을 넘기지 않는다 — 같은 계정인지 판단할 수 없다';
+  }
+  if (!/onSignedIn\(\s*APP_CONFIG\.MOCK\s*\)/.test(auth)) {
+    return 'MOCK 경로가 계정을 넘기지 않는다 (개발 화면만 다르게 동작한다)';
+  }
+  const body = fnBodyOf(app, 'onCredential');
+  if (!body) return 'onCredential이 없다';
+  if (!/signingInEmail/.test(body)) return '같은 계정인지 비교하지 않는다';
+  if (!/signInSeq\s*\+=\s*1/.test(body)) return '다른 계정일 때 옛 흐름을 버리지 않는다';
+  return /initGis\([^)]*onCredential/.test(app) || 'initGis에 onCredential을 넘기지 않는다';
+});
+
+check('★ 버려진 흐름이 정상 화면 위에 오류를 덧씌우지 않는다', () => {
+  // afterSignIn에서 «버려짐 검사»가 failToLogin보다 **먼저** 와야 한다.
+  // 순서가 뒤집히면 버려진 흐름의 stale_session이 새 흐름의 앱 화면을 덮는다.
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  const body = fnBodyOf(app, 'afterSignIn');
+  if (!body) return 'afterSignIn을 찾지 못함';
+  const atAbandon = body.indexOf('if (abandoned()) return;\n      if (!loaded.ok)');
+  if (atAbandon >= 0) return true;
+  // 공백이 달라졌을 수 있으니 느슨하게 한 번 더 본다.
+  const m = /if\s*\(abandoned\(\)\)\s*return;\s*if\s*\(!loaded\.ok\)/.test(body.replace(/\s+/g, ' ')
+    .replace(/if \(abandoned\(\)\) return; if \(!loaded\.ok\)/, 'if (abandoned()) return; if (!loaded.ok)'));
+  return m || 'loadMyData 뒤에서 버려짐 검사가 failToLogin보다 먼저 오지 않는다';
+});
+
+check('★ showUnexpected가 흐름을 버린다 (잠금만 풀지 않는다)', () => {
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  const body = fnBodyOf(app, 'showUnexpected');
+  if (!body) return 'showUnexpected를 찾지 못함';
+  if (!/signingIn\s*=\s*false/.test(body)) return true; // 잠금을 안 풀면 이 규칙은 해당 없음
+  return /signInSeq\s*\+=\s*1/.test(body) ||
+    '잠금만 풀고 세대를 안 올린다 — 살아 있는 옛 흐름과 새 흐름이 함께 달린다';
+});
+
+check('★ 분류를 바꾸면 가운데 칸을 비운다 (가입 검토 ①)', () => {
+  // 학생으로 «중2-1»을 적고 학부모로 바꾸면 시트 «자녀이름» 열에 «중2-1»이 저장됐다.
+  // 서버는 이걸 막을 수 없다 — 세 분류 모두 자유 텍스트라 값만 보고 구분이 안 된다.
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  const body = fnBodyOf(app, 'setKind');
+  if (!body) return 'setKind를 찾지 못함';
+  if (!/#reg-extra'\)\.value\s*=\s*''/.test(body)) {
+    return 'setKind가 #reg-extra를 비우지 않는다 — 앞 분류의 값이 다른 열에 저장된다';
+  }
+  // ★ 「changed라는 낱말이 어딘가 있는가」로는 부족하다 — 조건을 떼어내고
+  //   변수만 남겨도 통과해 버린다(이 규칙을 돌연변이 검증하다 발견).
+  //   **비우는 그 문장이** changed로 감싸여 있는지 본다. 무조건 비우면
+  //   같은 분류를 다시 누른 사용자가 적던 내용을 잃는다.
+  return /if\s*\(\s*changed\s*\)[^\n]*#reg-extra'\)\.value\s*=\s*''/.test(body) ||
+    '#reg-extra를 비우는 문장이 «분류가 바뀌었을 때»로 감싸여 있지 않다';
+});
+
+check('★ 빈 칸을 서버로 보내지 않는다 (가입 검토 ④)', () => {
+  // 빈 코드 제출도 서버는 «틀린 코드»로 세어 백오프를 올린다. 전역 카운터가
+  // 10분 20회라, 반 전체가 함께 가입할 때 시도도 안 한 사람까지 잠긴다.
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  const body = fnBodyOf(app, 'submitRegister');
+  if (!body) return 'submitRegister를 찾지 못함';
+  const atName = body.search(/#reg-name'\)\.value[^;]*trim\(\)/);
+  const atCode = body.search(/#reg-code'\)\.value[^;]*trim\(\)/);
+  const atCall = body.indexOf("api.call('register'");
+  if (atName < 0 || atCode < 0) return '이름·코드 빈칸 검사가 없다';
+  if (atCall < 0) return "api.call('register')를 찾지 못함";
+  return (atName < atCall && atCode < atCall) ||
+    '빈칸 검사가 register 호출보다 뒤에 있다 — 이미 백오프를 소진한 뒤다';
+});
+
+check('★ 가입 성공 뒤 실패에 «등록되지 않은 계정»이라 하지 않는다 (가입 검토 ②)', () => {
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  const body = fnBodyOf(app, 'submitRegister');
+  if (!body) return 'submitRegister를 찾지 못함';
+  if (/failToLogin\(/.test(body)) {
+    return 'submitRegister가 failToLogin을 직접 부른다 — 방금 가입한 사람에게 ' +
+      '「등록되지 않은 계정입니다」가 뜬다';
+  }
+  if (!/failAfterRegister\(/.test(body)) return '가입 직후 실패 처리가 없다';
+  const fn = fnBodyOf(app, 'failAfterRegister');
+  if (!fn) return 'failAfterRegister가 없다';
+  return /가입은 완료/.test(fn) || '«가입은 완료되었습니다»를 먼저 말하지 않는다';
+});
+
+check('★ 가입 화면도 오류 코드를 함께 보여 준다 (가입 검토 ⑧)', () => {
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  const body = fnBodyOf(app, 'submitRegister');
+  if (!body) return 'submitRegister를 찾지 못함';
+  return /#reg-error'\)\.textContent\s*=\s*api\.errorMessage\(res\.code\)\s*\+/.test(body) ||
+    '가입 화면 오류에 코드가 병기되지 않는다 — docs/ops의 조치표를 찾아갈 수 없다';
+});
+
+check('★ 분류 선택 상태가 보조기기에 전달된다 (가입 검토 ⑤)', () => {
+  const html = read(path.join(WEB, 'index.html'));
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  if (!/class="kind-choices"[^>]*role="group"/.test(html)) {
+    return '.kind-choices에 role="group"이 없다';
+  }
+  const btns = (html.match(/id="reg-kind-\w+"[^>]*aria-pressed/g) || []).length;
+  if (btns !== 3) return '분류 버튼 3개 중 aria-pressed 초기값이 있는 것은 ' + btns + '개';
+  const body = fnBodyOf(app, 'setKind');
+  return (body && /aria-pressed/.test(body)) || 'setKind가 aria-pressed를 갱신하지 않는다';
+});
+
+check('★ 오류가 없으면 가입 화면의 붉은 상자가 보이지 않는다 (가입 검토 ⑥)', () => {
+  const css = read(path.join(WEB, 'css', 'app.css'));
+  return /\.register-error:empty\s*\{[^}]*display\s*:\s*none/.test(css) ||
+    '.register-error:empty 규칙이 없다 — 오류가 없어도 빈 붉은 띠가 늘 보인다';
+});
+
+check('★ 시트 열 이름과 화면 문구의 불일치가 코드에 명시돼 있다', () => {
+  // 화면은 «혜림교회 소속부서», 시트 열은 «소속전도회»다(2026-08-02 사용자 결정).
+  // 근거를 코드에 남기지 않으면 다음 사람이 «오타»로 보고 고쳐 실데이터를 깬다.
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  if (!/혜림교회 소속부서/.test(app)) return '가입 화면 문구가 «혜림교회 소속부서»가 아니다';
+  const gas = path.join(ROOT, 'gas');
+  const actions = read(path.join(gas, 'Actions.gs'));
+  const auth2 = read(path.join(gas, 'Auth.gs'));
+  const missing = [];
+  if (!/의도된 것|의도된 불일치/.test(actions)) missing.push('gas/Actions.gs');
+  if (!/의도된 불일치|의도된 것/.test(auth2)) missing.push('gas/Auth.gs');
+  return missing.length === 0 ||
+    '불일치가 의도임을 밝힌 주석이 없는 파일: ' + missing.join(', ');
 });
 
 check('소스에 제어문자가 리터럴로 박혀 있지 않다', () => {

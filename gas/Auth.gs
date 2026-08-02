@@ -177,6 +177,9 @@ function lookupMember(email) {
       name: String(churchMember['이름'] || ''),
       role: 'member',
       kind: 'member',
+      // ★ 시트 열은 «소속전도회», 가입 화면 문구는 «혜림교회 소속부서»다.
+      //   의도된 불일치다 (2026-08-02 결정, 계약 §2.2b). 여기를 «소속부서»로
+      //   고치면 기존 성도들의 값이 화면에서 전부 빈칸으로 보인다.
       extra: String(churchMember['소속전도회'] || ''),
       joinedAt: formatDate_(churchMember['가입시각']),
     };
