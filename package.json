@@ -7,7 +7,8 @@
   "scripts": {
     "test": "node scripts/check-web.mjs && node scripts/test-gas-actions.mjs && node scripts/test-web-api.mjs && node scripts/test-web-views.mjs && node scripts/test-web-calendar.mjs && node scripts/test-stats.mjs && node scripts/test-library-data.mjs && node scripts/test-mccheyne.mjs && node scripts/test-inapp.mjs && node scripts/test-install.mjs",
     "fetch-library": "node scripts/fetch-library.mjs",
-    "dev": "node scripts/mock-server.mjs 8788"
+    "dev": "node scripts/mock-server.mjs 8788",
+    "verify-deploy": "node scripts/verify-deploy.mjs"
   },
   "engines": {
     "node": ">=18"

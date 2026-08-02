@@ -39,7 +39,7 @@ docs/     specs(계약) · ops(설치 문서) · plans(작업 계획)
 | v1.5.2 | 최종 검토자 지적 4건 수정 | ✅ 웹 배포됨 |
 | **서버(GAS)** | **`v1.5.0` 배포됨** — 단 「새 배포」가 만들어져 **주소가 바뀌었다** | ✅ v1.5.3에서 앱이 새 주소를 보도록 맞춤 |
 
-테스트: `npm test` — 현재 **550개 통과**. (`web/sw.js`의 `BUILD_TAG` = `v1.5.3`)
+테스트: `npm test` — 현재 **551개 통과**. (`web/sw.js`의 `BUILD_TAG` = `v1.5.4`)
 
 > ### ✅ GAS 서버 배포 완료 (2026-08-02) — 다만 주소가 바뀌었다
 >
@@ -54,8 +54,20 @@ docs/     specs(계약) · ops(설치 문서) · plans(작업 계획)
 > | **새 배포 (현재)** | `AKfycbzyJYXLClLcq…` | `v1.5.0` | **○** |
 > | 옛 배포 | `AKfycbxd2UmO5DaSs…` | `v1.2.0` | ✗ |
 >
-> **남은 정리(급하지 않음)**: 옛 배포를 **보관처리**하면 다음 배포 때 헷갈리지 않는다.
-> 절차와 주의사항은 [`docs/ops/08-update-v1.5.md`](ops/08-update-v1.5.md) 맨 위에 있다.
+> **★ 현재 배포 ID (여기가 단일 기준이다 — `scripts/check-web.mjs`가 이 줄을 읽는다)**
+>
+> <!-- CURRENT_GAS_DEPLOYMENT: AKfycbzyJYXLClLcqfk2r8stYnoedSL5xM7wUIkZakwN463BKa_QZrFaaxaZeyrcEuEoaBPz -->
+> ```
+> AKfycbzyJYXLClLcqfk2r8stYnoedSL5xM7wUIkZakwN463BKa_QZrFaaxaZeyrcEuEoaBPz
+> ```
+> 배포를 바꾸면 **이 줄과 `web/js/config.js`의 `GAS_URL`을 함께** 고쳐야 한다.
+> 둘이 어긋나면 `npm test`가 막는다.
+>
+> **★ 옛 배포 보관처리 — 미루지 말 것 (권장: 지금)**: 배포 목록에 둘이 있는 한
+> **다음 갱신이 옛 것에 붙을 확률이 절반**이고, 그러면 앱은 조용히 `v1.2.0`으로
+> 되돌아간다(명부 헤더 방어 없음, 「우리반」 화면이 죽는 버그 부활).
+> 겉으로는 배포에 성공한 것처럼 보이므로 알아채기 어렵다.
+> 절차와 주의사항은 [`docs/ops/08-update-v1.5.md`](ops/08-update-v1.5.md)에 있다.
 > **새 배포(`AKfycbzyJY…`)를 보관처리하면 앱이 멈춘다 — 앞부분을 반드시 확인할 것.**
 
 ---

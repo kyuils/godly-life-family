@@ -1167,30 +1167,39 @@ check('★ 시트 열 이름과 화면 문구의 불일치가 코드에 명시�
     '불일치가 의도임을 밝힌 주석이 없는 파일: ' + missing.join(', ');
 });
 
-check('★ 앱이 부르는 GAS 주소가 문서에 기록된 «현재 배포»와 같다', () => {
+check('★ 앱이 부르는 GAS 배포가 문서의 «현재 배포»와 일치한다', () => {
   // 2026-08-02에 실제로 난 사고: 「배포 관리 → 수정 → 새 버전」이 아니라 「새 배포」를
   // 누르면 **주소가 바뀐다.** 그러면 앱은 옛 서버를 계속 부르는데, 배포 화면은
-  // 성공한 것처럼 보이고 서버도 정상 응답하므로 겉으로는 아무 문제가 없어 보인다.
+  // 성공한 것처럼 보이고 옛 주소·새 주소 **둘 다 정상 응답**하므로 겉으로는 아무
+  // 문제가 없어 보인다. 며칠치 수정이 반영되지 않은 채 지나갔다.
   //
-  // 네트워크 없이 확인할 수 있는 것은 «config.js의 주소»와 «문서가 현재라고 적은 주소»가
-  // 일치하는가까지다. 그 이상(실제로 살아 있는가·어떤 build인가)은 사람이 브라우저로
-  // 확인해야 한다 — 정적 검사인 척하지 않는다.
+  // ★ 이 검사가 할 수 있는 것과 없는 것 (정직하게)
+  //   할 수 있다 : config.js의 배포 ID와 HANDOFF의 «현재 배포» 표식이 같은가.
+  //                즉 «둘 중 하나만 고치고 다른 하나를 잊은» 상태를 막는다.
+  //   할 수 없다 : 그 배포가 **실제로 어떤 코드를 서빙하는가.**
+  //                예를 들어 옛 배포를 «수정 → 새 버전»으로 갱신한 경우,
+  //                주소도 문서도 그대로라 이 검사는 통과한다.
+  //                → 그건 네트워크가 필요하다: `node scripts/verify-deploy.mjs`
+  //
+  // ★ 표식을 쓰는 이유: 예전에는 「HANDOFF 어딘가에 앞 12자가 있는가」로 봤는데,
+  //   문서가 같은 ID를 17자·10자 두 형태로 쓰고 있어서 **서식만 바꿔도 오탐**이 났다
+  //   (2026-08-02 최종 검토자가 재현). 이제 전체 ID를 표식 한 줄에서만 읽는다.
   const cfg = codeOnly(read(path.join(JS, 'config.js')));
   const m = /GAS_URL:\s*'https:\/\/script\.google\.com\/macros\/s\/([^/']+)\/exec'/.exec(cfg);
   if (!m) return 'config.js의 GAS_URL이 Apps Script 웹앱 주소 형식이 아니다';
   const id = m[1];
 
   const handoff = read(path.join(ROOT, 'docs', 'HANDOFF.md'));
-  // 문서는 앞부분만 적는다(전체를 적으면 옮겨 적다 틀리기 쉽다). 12자면 충분히 구분된다.
-  const head = id.slice(0, 12);
-  if (handoff.indexOf(head) < 0) {
-    return 'HANDOFF.md에 현재 배포 ID(' + head + '…)가 없다 — 배포를 바꾸고 문서를 안 고쳤거나, ' +
-      '「새 배포」로 주소가 바뀐 것을 모르고 있다';
+  const mark = /<!--\s*CURRENT_GAS_DEPLOYMENT:\s*([A-Za-z0-9_-]+)\s*-->/.exec(handoff);
+  if (!mark) {
+    return 'HANDOFF.md에 «CURRENT_GAS_DEPLOYMENT» 표식이 없다 — ' +
+      '지금 어느 배포가 살아 있는지 저장소가 기록하지 않고 있다';
   }
-  // 옛 배포 ID가 config에 남아 있으면 안 된다.
-  const OLD = 'AKfycbxd2UmO5DaSs';
-  return id.indexOf(OLD) !== 0 ||
-    'config.js가 아직 옛 배포(' + OLD + '…)를 부른다 — 그쪽은 v1.2.0을 서빙한다';
+  return mark[1] === id ||
+    'config.js가 부르는 배포와 HANDOFF의 «현재 배포»가 다르다\n' +
+    '        config.js : ' + id.slice(0, 20) + '…\n' +
+    '        HANDOFF   : ' + mark[1].slice(0, 20) + '…\n' +
+    '        → 배포를 바꿨다면 **둘 다** 고쳐야 한다';
 });
 
 check('소스에 제어문자가 리터럴로 박혀 있지 않다', () => {
