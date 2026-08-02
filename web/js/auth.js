@@ -67,8 +67,21 @@ function whenGisReady(onReady, onTimeout) {
   }, step);
 }
 
-export function initGis(container, callback) {
+/**
+ * @param opts.autoSelect 구글 «자동 로그인»을 허용할지 (기본 false).
+ *
+ * ★ 왜 기본이 false인가 (보안 불변식 7 / 계약 §6.4)
+ *   이 앱은 로그인 정보를 **기기에 저장하지 않는다.** 그래서 새로고침·앱 재실행마다
+ *   로그인 화면으로 돌아갔다 (2026-08-02 실사용 신고). 구글 GIS의 auto_select는
+ *   저장 없이 이 문제를 푼다 — 이미 승인한 계정이 **하나뿐일 때만** 구글이 조용히
+ *   토큰을 되돌려 준다. 그래도 «앱을 켤 때»에만 켠다:
+ *   로그아웃 직후에도 켜면 방금 로그아웃한 사람이 즉시 다시 로그인되어
+ *   공용 휴대폰에서 세션을 끊을 수단이 사라진다.
+ *   (signOut()의 disableAutoSelect()가 한 겹 더 막지만, 그 한 겹에만 기대지 않는다)
+ */
+export function initGis(container, callback, opts) {
   onSignedIn = callback;
+  const autoSelect = !!(opts && opts.autoSelect);
 
   if (isMock()) {
     // 개발·E2E 전용. 실제 배포에서는 APP_CONFIG.MOCK이 null이어야 한다.
@@ -79,7 +92,7 @@ export function initGis(container, callback) {
 
   container.textContent = '로그인 준비 중...';
   whenGisReady(
-    function () { container.textContent = ''; renderGisButton(container); },
+    function () { container.textContent = ''; renderGisButton(container, autoSelect); },
     function () {
       container.innerHTML = '';
       const btn = document.createElement('button');
@@ -95,7 +108,7 @@ export function initGis(container, callback) {
   );
 }
 
-function renderGisButton(container) {
+function renderGisButton(container, autoSelect) {
   window.google.accounts.id.initialize({
     client_id: APP_CONFIG.OAUTH_CLIENT_ID,
     callback: function (resp) {
@@ -103,12 +116,30 @@ function renderGisButton(container) {
       applyToken(email, resp.credential);
       onSignedIn();
     },
-    auto_select: false,
+    // 승인된 구글 세션이 하나뿐일 때 사용자 조작 없이 토큰을 돌려준다.
+    auto_select: autoSelect,
+    // 버튼을 눌렀을 때도 계정 선택창을 건너뛴다(크롬 M125+/안드로이드 M128+).
+    // autoSelect와 **같은 값**으로 묶는다 — 로그아웃 뒤에는 계정 선택창이 떠야
+    // 가족 중 다른 사람이 자기 계정으로 들어갈 수 있다.
+    button_auto_select: autoSelect,
     cancel_on_tap_outside: true,
   });
   window.google.accounts.id.renderButton(container, {
     theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with', locale: 'ko',
   });
+
+  if (autoSelect) {
+    // 자동 로그인·One Tap을 실제로 띄우는 것은 prompt()다. initialize()만으로는
+    // 아무 일도 일어나지 않는다.
+    //
+    // ★ 여기서 성공을 가정하지 않는다. 구글이 자동 로그인을 건너뛰는 경우가 많다:
+    //   승인된 계정이 둘 이상, 구글에 로그아웃 상태, 직전 자동 로그인 후 10분 이내,
+    //   One Tap을 여러 번 닫아 쿨다운에 걸린 경우.
+    //   그때는 아무 일도 일어나지 않고 **아래에 이미 그려 둔 로그인 버튼이 남는다.**
+    //   그래서 prompt()를 버튼보다 **뒤에** 부른다 — 순서를 바꾸면 자동 로그인이
+    //   막힌 사용자에게 버튼 없는 화면이 잠깐 보인다.
+    try { window.google.accounts.id.prompt(); } catch (e) { /* 버튼으로 로그인하면 된다 */ }
+  }
 }
 
 /**

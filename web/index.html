@@ -72,6 +72,23 @@ window.addEventListener('beforeinstallprompt', function (e) {
     </div>
   </section>
 
+  <!-- 로그인 진행 중 -->
+  <!-- ★ 이 화면이 없으면 «로그인이 안 된다»로 신고된다 (2026-08-02 실사용 신고).
+       구글 로그인 콜백이 끝난 뒤 앱 화면이 뜨기까지 서버 왕복이 2~4번 있고
+       (실측: 왕복 1회당 1.3~2.0초), 그동안 로그인 화면이 **아무 변화 없이**
+       그대로 남아 있었다. 사용자는 실패한 줄 알고 로그인을 한 번 더 누른다.
+       그래서 «로그인하면 로그인 화면이 다시 나오고, 다시 누르면 조금 뒤에 들어가진다»
+       로 보였다. 화면을 즉시 바꿔 «진행 중»임을 눈에 보이게 한다. -->
+  <section id="screen-loading" class="cover" hidden>
+    <div class="loading-body">
+      <div class="loading-brand">경건생활</div>
+      <div class="spinner" aria-hidden="true"></div>
+      <p class="loading-title" id="loading-desc" role="status" aria-live="polite">로그인 중입니다</p>
+      <!-- 서버가 응답하지 않을 때 갇히지 않도록 20초 뒤에만 나타난다. -->
+      <button type="button" class="btn ghost" id="loading-back" hidden>로그인 화면으로 돌아가기</button>
+    </div>
+  </section>
+
   <!-- 가입 -->
   <section id="screen-register" class="register" hidden>
     <div class="register-hero">

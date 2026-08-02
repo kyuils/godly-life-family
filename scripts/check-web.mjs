@@ -319,7 +319,7 @@ check('★ 화면 전환(hidden)을 CSS가 무력화하지 않는다', () => {
   // 화면 컨테이너에 display를 지정하는 클래스가 실제로 존재하는지도 확인해 둔다
   // (존재한다면 위 규칙이 없을 때 반드시 깨진다는 뜻이므로 규칙의 근거가 된다).
   const html = read(path.join(WEB, 'index.html'));
-  const ids = ['screen-login', 'screen-register', 'screen-app'];
+  const ids = ['screen-login', 'screen-loading', 'screen-register', 'screen-app'];
   const missing = ids.filter((id) => !new RegExp('id="' + id + '"').test(html));
   return missing.length === 0 || 'index.html에 없는 화면: ' + missing.join(', ');
 });
@@ -754,6 +754,116 @@ check('모든 web/js 파일이 구문 오류 없이 파싱된다', () => {
     try { new Function(stripped); } catch (e) { bad.push(f + ': ' + e.message); }
   });
   return bad.length === 0 || bad.join(' | ');
+});
+
+// ---------------------------------------------------------------------------
+// v1.4 — 로그인 흐름 (2026-08-02 실사용 신고 2건)
+//   ① "로그인하면 로그인 페이지가 다시 나오고, 다시 로그인해야 들어가진다"
+//   ② "새로고침하면 다시 로그인하라고 뜬다"
+// ---------------------------------------------------------------------------
+
+/** 소스에서 함수 하나의 본문을 통째로 잘라낸다(중괄호 균형). 없으면 null. */
+function fnBodyOf(src, name) {
+  const m = new RegExp('function\\s+' + name + '\\s*\\([^)]*\\)\\s*\\{').exec(src);
+  if (!m) return null;
+  let depth = 0;
+  for (let i = m.index + m[0].length - 1; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}') { depth--; if (depth === 0) return src.slice(m.index, i + 1); }
+  }
+  return null;
+}
+
+check('★ 로그인 진행 중에 화면이 즉시 바뀐다 (신고 ①)', () => {
+  // 구글 콜백 뒤 앱 화면까지 서버 왕복이 2~4번(실측 회당 1.3~2.0초) 있다.
+  // 그동안 로그인 화면을 그대로 두면 «실패했다»로 읽혀 사용자가 다시 누른다.
+  // 그래서 whoami를 **부르기 전에** 화면이 바뀌어 있어야 한다 — 순서가 핵심이다.
+  const html = read(path.join(WEB, 'index.html'));
+  if (!/id="screen-loading"/.test(html)) return 'index.html에 #screen-loading이 없다';
+  if (!/id="loading-desc"/.test(html)) return '#loading-desc(진행 문구)가 없다';
+  // 응답이 오지 않을 때 갇히지 않을 탈출구.
+  if (!/id="loading-back"/.test(html)) return '#loading-back(되돌아가기)이 없다';
+
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  if (!/SCREENS\s*=\s*\[[^\]]*'screen-loading'/.test(app)) {
+    return "show()가 다루는 화면 목록에 'screen-loading'이 없다 — 다른 화면으로 가도 안 감춰진다";
+  }
+  const body = fnBodyOf(app, 'afterSignIn');
+  if (!body) return 'afterSignIn을 찾지 못함';
+  const atLoading = body.indexOf('showLoading(');
+  const atCall = body.indexOf("api.call('whoami'");
+  if (atLoading < 0) return 'afterSignIn이 showLoading()을 부르지 않는다';
+  if (atCall < 0) return "afterSignIn에서 api.call('whoami')를 찾지 못함";
+  return atLoading < atCall ||
+    'showLoading()이 whoami 호출보다 뒤에 있다 — 기다리는 동안 로그인 화면이 그대로 남는다';
+});
+
+check('★ 로그인 흐름이 겹쳐 돌지 않는다 (신고 ①)', () => {
+  // 자동 로그인·One Tap·버튼 클릭에서 콜백이 각각 올 수 있다. 겹치면 서버 왕복이
+  // 두 벌 돌고 늦게 끝난 쪽이 화면을 덮어쓴다.
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  const body = fnBodyOf(app, 'afterSignIn');
+  if (!body) return 'afterSignIn을 찾지 못함';
+  if (!/if\s*\(\s*signingIn\s*\)\s*return/.test(body)) {
+    return 'afterSignIn에 진행 중 가드(if (signingIn) return)가 없다';
+  }
+  if (!/signingIn\s*=\s*true/.test(body)) return 'signingIn을 true로 세우지 않는다';
+  // ★ 이 검사가 진짜다. finally가 없으면 예외 한 번에 이후 모든 로그인이
+  //   조용히 무시된다 — 사용자에게는 «버튼을 눌러도 아무 반응이 없다»가 된다.
+  const fin = /finally\s*\{[\s\S]*?signingIn\s*=\s*false/.test(body);
+  return fin || 'signingIn을 finally에서 풀지 않는다 — 예외가 나면 영영 잠긴다';
+});
+
+check('★ 자동 로그인은 앱을 켤 때만 켠다 (신고 ② / 불변식 7)', () => {
+  // 새로고침해도 다시 로그인하지 않게 하되, **로그아웃 직후에는 절대 켜지지 않아야**
+  // 한다. 켜지면 방금 로그아웃한 사람이 즉시 다시 로그인되어, 공용 휴대폰에서
+  // 계정을 끊을 수단이 사라진다.
+  const app = codeOnly(read(path.join(JS, 'app.js')));
+  const auth = codeOnly(read(path.join(JS, 'auth.js')));
+
+  // auth.js는 opts로 받아 그대로 GIS에 넘긴다. 상수 true를 박으면 안 된다.
+  if (/auto_select\s*:\s*true/.test(auth)) {
+    return 'auth.js가 auto_select를 항상 true로 박았다 — 로그아웃 뒤에도 자동 로그인된다';
+  }
+  if (!/auto_select\s*:\s*autoSelect/.test(auth)) return 'auth.js가 auto_select를 인자로 받지 않는다';
+  if (!/button_auto_select\s*:\s*autoSelect/.test(auth)) {
+    return 'button_auto_select가 autoSelect와 묶이지 않았다 — 로그아웃 뒤 계정 선택창이 뜨지 않는다';
+  }
+  if (!/\.prompt\(\)/.test(auth)) return 'prompt() 호출이 없다 — initialize()만으로는 자동 로그인이 일어나지 않는다';
+
+  // app.js에서 autoSelect:true를 넘기는 곳은 start() **한 곳뿐**이어야 한다.
+  const trues = (app.match(/autoSelect\s*:\s*true/g) || []).length;
+  if (trues !== 1) return 'autoSelect:true를 넘기는 곳이 ' + trues + '곳 — start() 한 곳이어야 한다';
+  const start = fnBodyOf(app, 'start');
+  if (!start) return 'start()를 찾지 못함';
+  if (!/autoSelect\s*:\s*true/.test(start)) return 'autoSelect:true가 start() 밖에 있다';
+
+  // 로그아웃·세션만료 복귀 경로가 renderLogin()을 인자 없이 부르는지 확인한다.
+  const back = fnBodyOf(app, 'backToLogin');
+  if (!back) return 'backToLogin()을 찾지 못함';
+  return /renderLogin\(\s*\)/.test(back) ||
+    'backToLogin이 renderLogin()에 인자를 넘긴다 — 로그아웃 직후 자동 로그인될 수 있다';
+});
+
+check('★ 로그아웃이 구글 자동 로그인을 끈다 (불변식 7)', () => {
+  // disableAutoSelect()는 구글 쪽에 «이 사용자는 로그아웃했다»를 남긴다.
+  // 이게 빠지면 로그아웃 후 새로고침만으로 같은 계정이 되살아난다.
+  const auth = codeOnly(read(path.join(JS, 'auth.js')));
+  const body = fnBodyOf(auth, 'signOut');
+  if (!body) return 'signOut()을 찾지 못함';
+  return /disableAutoSelect\(\)/.test(body) ||
+    'signOut()이 disableAutoSelect()를 부르지 않는다';
+});
+
+check('★ 로그인 정보를 기기에 저장하지 않는다 (불변식 7)', () => {
+  // 신고 ②를 «토큰을 localStorage에 저장»으로 푸는 것이 가장 쉬운 유혹이다.
+  // 그러면 가족이 공유하는 휴대폰에서 앞사람 계정으로 앱이 열린다.
+  const offenders = ['auth.js', 'api.js', 'app.js'].filter((f) => {
+    const s = codeOnly(read(path.join(JS, f)));
+    return /localStorage|sessionStorage|indexedDB|document\.cookie/.test(s);
+  });
+  return offenders.length === 0 ||
+    '기기 저장소를 쓰는 파일: ' + offenders.join(', ') + ' — 자동 로그인은 구글 auto_select로 푼다';
 });
 
 check('소스에 제어문자가 리터럴로 박혀 있지 않다', () => {

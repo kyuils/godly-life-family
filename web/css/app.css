@@ -283,6 +283,24 @@
       font-family:'Noto Serif KR', serif;
       font-size:clamp(28px, 8.4vw, 32px);line-height:1.18;font-weight:600;letter-spacing:-0.01em;
     }
+    /* ── 로그인 진행 중 화면 (#screen-loading) ──
+       로그인 콜백 뒤 서버 왕복(2~4회, 회당 1.3~2.0초) 동안 보여 준다.
+       이 화면이 없으면 로그인 화면이 그대로 남아 «실패한 것»으로 읽힌다. */
+    .loading-body{
+      flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+      gap:18px;padding:28px 24px;text-align:center;
+    }
+    .loading-brand{font-size:14px;font-weight:500;color:#A09D96;letter-spacing:-0.01em}
+    .loading-title{margin:0;font-size:17px;font-weight:600;color:#181715;word-break:keep-all}
+    .spinner{
+      width:36px;height:36px;border-radius:50%;
+      border:3px solid #E6E1D6;border-top-color:#CC785C;
+      animation:spin 0.9s linear infinite;
+    }
+    @keyframes spin{to{transform:rotate(360deg)}}
+    /* 회전을 없애면 «멈춘 화면»으로 보이므로, 끄지 않고 느리게만 돌린다. */
+    @media (prefers-reduced-motion: reduce){.spinner{animation-duration:2.4s}}
+
     /* 크림 바디 */
     .cover-body{flex:1;display:flex;flex-direction:column;padding:28px 24px calc(env(safe-area-inset-bottom) + 24px)}
     /* 검은 표지 박스와 기능 목록이 맞붙어 보이던 것을 띄운다 (2026-07-31 요청).

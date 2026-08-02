@@ -34,14 +34,16 @@ function scrollToTop() {
 let shownScreen = null;
 
 /**
- * 화면 전환 — 로그인 / 가입 / 앱 중 **하나만** 보이게 한다.
+ * 화면 전환 — 로그인 / 로그인중 / 가입 / 앱 중 **하나만** 보이게 한다.
  *
  * hidden 하나로 갈리므로, css의 `[hidden]{display:none!important}`가 반드시
  * 함께 있어야 한다. 그 규칙이 없으면 .cover·.register의 display:flex가 이겨
- * 세 화면이 위아래로 이어 붙는다 (2026-07-30 실사용 신고의 원인).
+ * 네 화면이 위아래로 이어 붙는다 (2026-07-30 실사용 신고의 원인).
  */
+const SCREENS = ['screen-login', 'screen-loading', 'screen-register', 'screen-app'];
+
 function show(screen) {
-  ['screen-login', 'screen-register', 'screen-app'].forEach(function (id) {
+  SCREENS.forEach(function (id) {
     el('#' + id).hidden = (id !== screen);
   });
   // 화면이 실제로 바뀔 때만 맨 위로. 같은 화면을 다시 그리는 경우(저장 후 갱신 등)는
@@ -162,40 +164,101 @@ function promptCopy(url) {
   catch (e) { toast('주소: ' + url); }
 }
 
-function renderLogin() {
+/**
+ * 로그인 화면.
+ *
+ * @param opts.autoSelect 구글 «자동 로그인»(auto_select)을 허용할지.
+ *   **앱을 처음 켤 때만 true**다. 로그아웃·세션만료로 되돌아온 경우에는 false —
+ *   로그아웃한 사람이 곧바로 다시 로그인되면 공용 휴대폰에서 계정을 끊을 수단이 없어진다
+ *   (보안 불변식 7). 자세한 근거는 계약 §6.4.
+ */
+function renderLogin(opts) {
   closeSheet();
   show('screen-login');
   setupInAppBanner();
   setupInstallBanner('#install-banner', '#install-go');
   const holder = el('#gis-button');
   holder.innerHTML = '';
-  auth.initGis(holder, afterSignIn);
+  auth.initGis(holder, afterSignIn, { autoSelect: !!(opts && opts.autoSelect) });
 }
 
-async function afterSignIn() {
-  const res = await api.call('whoami', {}, { noCache: true });
+// ---------------------------------------------------------------------------
+// 로그인 진행 중 화면
+// ---------------------------------------------------------------------------
+//
+// ★ 왜 필요한가 (2026-08-02 실사용 신고: "로그인하면 로그인 페이지가 다시 나오고,
+//   한 번 더 로그인하면 조금 뒤에 들어가진다")
+//
+//   구글 콜백 이후 앱 화면까지 서버 왕복이 2~4번 있다(whoami → getMyRecords →
+//   [월 확장] → getMyPrayers). 실측 왕복 1회가 1.3~2.0초이므로 합쳐서 3~8초다.
+//   그동안 화면은 **로그인 화면 그대로**였다. 사용자에게는 «아무 일도 안 일어났다»
+//   = «다시 로그인 화면» 으로 읽히고, 로그인 버튼을 한 번 더 누르게 된다.
+//   그 두 번째 시도가 끝날 때쯤 첫 번째 흐름이 도착해 앱이 열리므로
+//   «두 번 해야 된다»는 인상이 굳는다.
 
-  if (res.ok) {
-    state.session = res;
-    const loaded = await loadMyData(auth.todayStr());
-    if (!loaded.ok) { failToLogin(loaded.code); return; }
-    renderApp();
-    return;
-  }
-  if (res.code === 'unauthorized') {
-    if (res.canRegister) { renderRegister(res.email); }
-    else {
-      show('screen-login');
-      el('#login-notice').textContent =
-        '등록되지 않은 계정입니다. 담임교사에게 문의해 주세요. (' + (res.email || '') + ')';
+let loadingTimer = null;
+
+function showLoading(message) {
+  show('screen-loading');
+  el('#loading-desc').textContent = message;
+
+  // 서버가 끝내 응답하지 않을 때 이 화면에 갇히지 않도록 탈출구를 둔다.
+  // 처음부터 보이면 «눌러야 하나?» 하고 진행 중인 로그인을 스스로 끊게 되므로 늦게 낸다.
+  const back = el('#loading-back');
+  back.hidden = true;
+  back.onclick = function () {
+    signingIn = false;          // 진행 중 표시를 풀어야 다시 로그인할 수 있다
+    backToLogin('');
+  };
+  if (loadingTimer) clearTimeout(loadingTimer);
+  loadingTimer = setTimeout(function () { back.hidden = false; }, 20000);
+}
+
+function clearLoading() {
+  if (loadingTimer) { clearTimeout(loadingTimer); loadingTimer = null; }
+}
+
+// 로그인 흐름이 진행 중인지. 구글 콜백은 자동 로그인·버튼 클릭·One Tap에서
+// 각각 올 수 있어 겹칠 수 있다. 겹치면 서버 왕복이 두 벌 돌고,
+// 늦게 끝난 쪽이 화면을 덮어쓴다.
+let signingIn = false;
+
+async function afterSignIn() {
+  if (signingIn) return;
+  signingIn = true;
+  try {
+    // ★ try 안에서 부른다. 밖에 두면 여기서 예외가 났을 때 finally를 거치지 않아
+    //   signingIn이 true로 잠긴 채 남고, 이후 모든 로그인 시도가 조용히 무시된다.
+    showLoading('로그인 정보를 확인하고 있어요');
+    const res = await api.call('whoami', {}, { noCache: true });
+
+    if (res.ok) {
+      state.session = res;
+      showLoading('기록을 불러오고 있어요');
+      const loaded = await loadMyData(auth.todayStr());
+      if (!loaded.ok) { failToLogin(loaded.code); return; }
+      renderApp();
+      return;
     }
-    return;
+    if (res.code === 'unauthorized') {
+      if (res.canRegister) { renderRegister(res.email); }
+      else {
+        show('screen-login');
+        el('#login-notice').textContent =
+          '등록되지 않은 계정입니다. 담임교사에게 문의해 주세요. (' + (res.email || '') + ')';
+      }
+      return;
+    }
+    show('screen-login');
+    // 코드를 함께 보여 준다. 비개발자 운영자가 화면만 보고도 원인을 그대로 전달할 수
+    // 있어야 docs/ops의 «이럴 때는» 표를 찾아갈 수 있다 (2026-07-30 설치 후 실제 신고:
+    // «로그인이 안 되고 로그인 화면으로 돌아온다» — 화면에 코드가 없어 진단이 막혔다).
+    el('#login-notice').textContent = api.errorMessage(res.code) + ' [' + res.code + ']';
+  } finally {
+    // 예외로 빠져나가도 반드시 푼다. 안 그러면 이후 모든 로그인 시도가 조용히 무시된다.
+    clearLoading();
+    signingIn = false;
   }
-  show('screen-login');
-  // 코드를 함께 보여 준다. 비개발자 운영자가 화면만 보고도 원인을 그대로 전달할 수
-  // 있어야 docs/ops의 «이럴 때는» 표를 찾아갈 수 있다 (2026-07-30 설치 후 실제 신고:
-  // «로그인이 안 되고 로그인 화면으로 돌아온다» — 화면에 코드가 없어 진단이 막혔다).
-  el('#login-notice').textContent = api.errorMessage(res.code) + ' [' + res.code + ']';
 }
 
 // ---------------------------------------------------------------------------
@@ -482,7 +545,18 @@ function showUnexpected(what) {
   const notice = document.getElementById('login-notice');
   if (!notice) return;
   const login = document.getElementById('screen-login');
-  if (login && login.hidden) return; // 앱 화면이 정상히 떠 있으면 건드리지 않는다
+  const loading = document.getElementById('screen-loading');
+
+  // ★ 로그인 진행 중(로딩 화면)에 터진 오류를 그대로 두면 도는 원 안에 갇힌다.
+  //   로딩 화면에는 문구를 놓을 자리가 없으므로 로그인 화면으로 되돌린 뒤 남긴다.
+  //   (이 분기가 없으면 아래 «login.hidden이면 반환»에 걸려 오류가 조용히 사라진다)
+  if (loading && !loading.hidden) {
+    clearLoading();
+    signingIn = false;
+    show('screen-login');
+  } else if (login && login.hidden) {
+    return; // 앱 화면이 정상히 떠 있으면 건드리지 않는다
+  }
   notice.textContent = '예기치 못한 오류가 났습니다. 이 문구를 담임교사에게 알려 주세요. ' +
     '[' + String(what).slice(0, 160) + ']';
 }
@@ -526,7 +600,11 @@ function start() {
       '. 설치문서(docs/ops/04번 1단계)를 완료해 주세요.';
     return;
   }
-  renderLogin();
+  // ★ 앱을 켜는 이 한 곳에서만 «자동 로그인»을 허용한다 (계약 §6.4).
+  //   새로고침·앱 재실행으로 메모리의 로그인 정보가 사라졌을 때, 구글이
+  //   이미 승인된 계정을 조용히 되돌려 주어 로그인 화면을 다시 보지 않게 한다.
+  //   토큰을 기기에 저장하지 않으므로 보안 불변식 7을 건드리지 않는다.
+  renderLogin({ autoSelect: true });
 }
 
 // 서비스워커 — 정적 자산과 참고자료만 캐시한다. GAS 호출(POST)은 절대 캐시하지 않는다 (계약 §6.2).
